@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>武汉市房价空间预测与可视化系统 v2</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0;
+            display: flex; height: 100vh;
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0f1923;
+            color: #e0e6f0;
+        }
+
+        /* ── 侧边栏 ── */
+        #sidebar {
+            width: 380px; min-width: 320px;
+            background: linear-gradient(180deg, #141e2e 0%, #0f1923 100%);
+            border-right: 1px solid #1e3050;
+            display: flex; flex-direction: column;
+            z-index: 1000; overflow-y: auto;
+        }
+
+        #sidebar-header {
+            padding: 20px 20px 12px;
+            border-bottom: 1px solid #1e3050;
+            background: linear-gradient(135deg, #0d2137 0%, #1a3a5c 100%);
+        }
+
+        #sidebar-header h1 {
+            margin: 0 0 4px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #7ec8e3;
+            letter-spacing: 1px;
+        }
+
+        #sidebar-header p {
+            margin: 0;
+            font-size: 0.75rem;
+            color: #5a7a9a;
+        }
+
+        .section { padding: 16px 20px; border-bottom: 1px solid #1a2d45; }
+
+        .section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #4a90d9;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin: 0 0 12px;
+        }
+
+        /* ── 模型切换 Tab ── */
+        .tab-bar {
+            display: flex; gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .tab-btn {
+            flex: 1; padding: 7px 4px;
+            background: #1a2d45; border: 1px solid #1e3a5a;
+            border-radius: 6px; color: #7a9ab8;
+            font-size: 0.8rem; cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: #1a4a7a; border-color: #2a7abf;
+            color: #7ec8e3; font-weight: 600;
+        }
+
+        .tab-btn:hover:not(.active) { background: #1e3550; color: #a0c0d8; }
+
+        /* ── 模型指标卡 ── */
+        .metrics-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 8px; margin-bottom: 12px;
+        }
+
+        .metric-card {
+            background: #1a2d45; border-radius: 8px;
+            padding: 10px 12px; border: 1px solid #1e3a5a;
+        }
+
+        .metric-label { font-size: 0.7rem; color: #5a7a9a; margin-bottom: 4px; }
+
+        .metric-value {
+            font-size: 1.3rem; font-weight: 700;
+            color: #7ec8e3;
+        }
+
+        .metric-value.good { color: #4caf50; }
+        .metric-value.warn { color: #ff9800; }
+
+        /* ── R² 对比图 ── */
+        #chart-r2 { width: 100%; height: 180px; }
+
+        /* ── 预测面板 ── */
+        #calculator-panel { display: none; }
+
+        .location-badge {
+            background: #1a2d45; border-radius: 6px;
+            padding: 8px 12px; margin-bottom: 12px;
+            border-left: 3px solid #2a7abf;
+            font-size: 0.8rem; color: #a0c0d8;
+            line-height: 1.6;
+        }
+
+        .location-badge strong { color: #7ec8e3; }
+
+        .input-group { margin-bottom: 10px; }
+
+        .input-group label {
+            display: block; font-size: 0.78rem;
+            color: #7a9ab8; margin-bottom: 4px;
+        }
+
+        .input-row {
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .input-row input[type="range"] {
+            flex: 1; accent-color: #2a7abf;
+            cursor: pointer;
+        }
+
+        .input-row input[type="number"] {
+            width: 68px; padding: 4px 6px;
+            background: #1a2d45; border: 1px solid #2a4a6a;
+            border-radius: 4px; color: #e0e6f0;
+            font-size: 0.82rem; text-align: center;
+        }
+
+        .input-row input[type="number"]:focus {
+            outline: none; border-color: #2a7abf;
+        }
+
+        .hint-text {
+            font-size: 0.72rem; color: #4a6a8a;
+            margin-bottom: 12px; line-height: 1.5;
+            padding: 8px 10px; background: #111d2c;
+            border-radius: 5px;
+        }
+
+        .predict-btn {
+            width: 100%; padding: 11px;
+            background: linear-gradient(135deg, #1a5a9a, #2a7abf);
+            color: white; border: none; border-radius: 7px;
+            cursor: pointer; font-size: 0.9rem; font-weight: 600;
+            letter-spacing: 1px;
+            transition: opacity 0.2s, transform 0.1s;
+            margin-top: 4px;
+        }
+
+        .predict-btn:hover { opacity: 0.9; }
+        .predict-btn:active { transform: scale(0.98); }
+
+        /* ── 预测结果 ── */
+        #result-box {
+            margin-top: 14px; padding: 14px;
+            background: #111d2c; border-radius: 8px;
+            border: 1px solid #1e3a5a; text-align: center;
+        }
+
+        #result-box .result-label { font-size: 0.78rem; color: #5a7a9a; margin-bottom: 6px; }
+
+        #result-box .result-value {
+            font-size: 2rem; font-weight: 700;
+            color: #4caf50; line-height: 1;
+        }
+
+        #result-box .result-unit { font-size: 0.85rem; color: #4caf50; margin-top: 4px; }
+
+        #result-box .result-range {
+            font-size: 0.72rem; color: #4a6a8a;
+            margin-top: 8px;
+        }
+
+        /* ── 地图 ── */
+        #map { flex: 1; height: 100%; }
+
+        /* ── 地图图例 ── */
+        .map-legend {
+            background: rgba(15, 25, 35, 0.88);
+            border: 1px solid #1e3050;
+            border-radius: 8px; padding: 10px 14px;
+            color: #a0c0d8; font-size: 0.75rem;
+            line-height: 1.8;
+        }
+
+        .legend-dot {
+            display: inline-block; width: 10px; height: 10px;
+            border-radius: 50%; margin-right: 6px; vertical-align: middle;
+        }
+
+        /* ── 加载状态 ── */
+        #loading-overlay {
+            position: fixed; inset: 0;
+            background: rgba(10, 16, 25, 0.92);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 9999; transition: opacity 0.4s;
+        }
+
+        #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #1e3050;
+            border-top-color: #2a7abf;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 14px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-text { color: #5a7a9a; font-size: 0.85rem; }
+
+        /* ── 滚动条 ── */
+        #sidebar::-webkit-scrollbar { width: 4px; }
+        #sidebar::-webkit-scrollbar-track { background: transparent; }
+        #sidebar::-webkit-scrollbar-thumb { background: #1e3050; border-radius: 2px; }
+
+        /* ── 响应式 ── */
+        @media (max-width: 700px) {
+            #sidebar { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid #1e3050; }
+            body { flex-direction: column; }
+            #map { height: 50vh; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">正在加载 GWR 系数数据…</div>
+</div>
+
+<!-- ══ 侧边栏 ══ -->
+<div id="sidebar">
+
+    <div id="sidebar-header">
+        <h1>武汉市房价空间预测系统</h1>
+        <p>MLR · Lasso · 地理加权回归 (GWR)</p>
+    </div>
+
+    <!-- 模型切换 -->
+    <div class="section">
+        <div class="section-title">模型选择</div>
+        <div class="tab-bar">
+            <button class="tab-btn" onclick="switchModel('mlr')">MLR</button>
+            <button class="tab-btn" onclick="switchModel('lasso')">Lasso</button>
+            <button class="tab-btn active" onclick="switchModel('gwr')">GWR</button>
+        </div>
+
+        <!-- 当前模型指标 -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">R² 决定系数</div>
+                <div class="metric-value good" id="metric-r2">0.6322</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">RMSE 均方根误差</div>
+                <div class="metric-value" id="metric-rmse">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- R² 对比图 -->
+    <div class="section">
+        <div class="section-title">模型性能对比 (R²)</div>
+        <div id="chart-r2"></div>
+    </div>
+
+    <!-- 预测面板 -->
+    <div class="section" id="calculator-panel">
+        <div class="section-title">自定义位置预测</div>
+
+        <div class="location-badge" id="location-badge">
+            <strong>基准点：</strong>未选择<br>
+            <span style="color:#4a6a8a; font-size:0.72rem;">在地图上点击任意位置以选择预测基准点</span>
+        </div>
+
+        <div class="hint-text">
+            💡 输入框为标准化值：0 = 全市平均水平，正数 = 优于平均，负数 = 低于平均。<br>
+            拖动滑块或直接输入数值。
+        </div>
+
+        <div class="input-group">
+            <label>离学校距离（标准值）</label>
+            <div class="input-row">
+                <input type="range" id="range-school" min="-3" max="3" step="0.1" value="0" oninput="syncInput('school')">
+                <input type="number" id="input-school" step="0.1" value="0" oninput="syncRange('school')">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>离交通设施距离（标准值）</label>
+            <div class="input-row">
+                <input type="range" id="range-traffic" min="-3" max="3" step="0.1" value="0" oninput="syncInput('traffic')">
+                <input type="number" id="input-traffic" step="0.1" value="0" oninput="syncRange('traffic')">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>周边医疗数量（标准值）</label>
+            <div class="input-row">
+                <input type="range" id="range-medical" min="-3" max="3" step="0.1" value="0" oninput="syncInput('medical')">
+                <input type="number" id="input-medical" step="0.1" value="0" oninput="syncRange('medical')">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>小区容积率（标准值）</label>
+            <div class="input-row">
+                <input type="range" id="range-far" min="-3" max="3" step="0.1" value="0" oninput="syncInput('far')">
+                <input type="number" id="input-far" step="0.1" value="0" oninput="syncRange('far')">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>小区绿化率（标准值）</label>
+            <div class="input-row">
+                <input type="range" id="range-green" min="-3" max="3" step="0.1" value="0" oninput="syncInput('green')">
+                <input type="number" id="input-green" step="0.1" value="0" oninput="syncRange('green')">
+            </div>
+        </div>
+
+        <button class="predict-btn" onclick="calculatePrice()">执行预测</button>
+
+        <div id="result-box">
+            <div class="result-label">预测单价（元/㎡）</div>
+            <div class="result-value" id="final-price">—</div>
+            <div class="result-unit" id="result-unit" style="display:none;">元 / ㎡</div>
+            <div class="result-range" id="result-range"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══ 地图 ══ -->
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── 模型数据 ──────────────────────────────────────────────
+const MODEL_STATS = {
+    mlr:   { r2: '0.5005', rmse: '4421.64', r2Class: 'warn' },
+    lasso: { r2: '0.5038', rmse: '4407.29', r2Class: 'warn' },
+    gwr:   { r2: '0.6322', rmse: '3909.86', r2Class: 'good' }
+};
+
+let currentModel = 'gwr';
+let currentPointData = null;
+let allGwrData = [];
+let userMarker = null;
+let gwrMarkers = [];
+
+// ── 地图初始化 ────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false }).setView([30.5928, 114.3055], 11);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+    subdomains: ['1','2','3','4'],
+    attribution: '© 高德地图',
+    maxZoom: 18
+}).addTo(map);
+
+// ── 图例 ─────────────────────────────────────────────────
+const legend = L.control({ position: 'bottomleft' });
+legend.onAdd = () => {
+    const div = L.DomUtil.create('div', 'map-legend');
+    div.innerHTML = `
+        <b style="color:#7ec8e3; display:block; margin-bottom:4px;">图例</b>
+        <span class="legend-dot" style="background:#ff7800;"></span>已知小区（GWR 系数点）<br>
+        <span class="legend-dot" style="background:#2196F3;"></span>用户选择的预测点
+    `;
+    return div;
+};
+legend.addTo(map);
+
+// ── ECharts R² 对比图 ─────────────────────────────────────
+const myChart = echarts.init(document.getElementById('chart-r2'), 'dark');
+myChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { formatter: p => `${p.name}<br/>R² = ${p.value}` },
+    grid: { top: 10, bottom: 30, left: 40, right: 10 },
+    xAxis: {
+        type: 'category',
+        data: ['MLR', 'Lasso', 'GWR'],
+        axisLabel: { color: '#7a9ab8', fontSize: 11 },
+        axisLine: { lineStyle: { color: '#1e3050' } }
+    },
+    yAxis: {
+        type: 'value', min: 0, max: 1,
+        axisLabel: { color: '#7a9ab8', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#1a2d45' } }
+    },
+    series: [{
+        data: [
+            { value: 0.5005, itemStyle: { color: '#ff9800' } },
+            { value: 0.5038, itemStyle: { color: '#ff9800' } },
+            { value: 0.6322, itemStyle: { color: '#4caf50' } }
+        ],
+        type: 'bar',
+        barMaxWidth: 40,
+        label: { show: true, position: 'top', color: '#a0c0d8', fontSize: 11 }
+    }]
+});
+
+// ── 模型切换 ──────────────────────────────────────────────
+function switchModel(model) {
+    currentModel = model;
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', ['mlr','lasso','gwr'][i] === model);
+    });
+    const stats = MODEL_STATS[model];
+    const r2El = document.getElementById('metric-r2');
+    r2El.textContent = stats.r2;
+    r2El.className = 'metric-value ' + stats.r2Class;
+    document.getElementById('metric-rmse').textContent = stats.rmse;
+
+    // 重置预测结果
+    document.getElementById('final-price').textContent = '—';
+    document.getElementById('result-unit').style.display = 'none';
+    document.getElementById('result-range').textContent = '';
+}
+
+// ── 滑块 ↔ 数字框同步 ────────────────────────────────────
+function syncInput(key) {
+    const v = document.getElementById('range-' + key).value;
+    document.getElementById('input-' + key).value = v;
+}
+function syncRange(key) {
+    const v = document.getElementById('input-' + key).value;
+    document.getElementById('range-' + key).value = v;
+}
+
+// ── 加载 GWR JSON ─────────────────────────────────────────
+fetch('gwr_coefficients.json')
+    .then(r => r.json())
+    .then(data => {
+        allGwrData = data;
+        console.log('GWR 数据加载完成：', data.length, '条');
+
+        // 按 intercept 值着色（热力感）
+        const intercepts = data.map(d => d.intercept);
+        const minI = Math.min(...intercepts), maxI = Math.max(...intercepts);
+
+        data.forEach(point => {
+            const t = (point.intercept - minI) / (maxI - minI);
+            const color = interpolateColor('#1a6abf', '#ff7800', t);
+            const m = L.circleMarker([point.lat, point.lon], {
+                radius: 5, fillColor: color,
+                color: '#fff', weight: 0.5,
+                opacity: 0.8, fillOpacity: 0.75
+            }).addTo(map);
+
+            m.bindTooltip(`
+                <b>小区 #${point.id}</b><br>
+                截距（基准价）: <b>${Math.round(point.intercept).toLocaleString()} 元/㎡</b>
+            `, { direction: 'top', offset: [0, -4] });
+
+            gwrMarkers.push(m);
+        });
+
+        document.getElementById('loading-overlay').classList.add('hidden');
+        // 显示预测面板（等待地图点击）
+        document.getElementById('calculator-panel').style.display = 'block';
+    })
+    .catch(err => {
+        console.error('GWR 数据加载失败', err);
+        document.getElementById('loading-overlay').classList.add('hidden');
+    });
+
+// ── 颜色插值工具 ─────────────────────────────────────────
+function interpolateColor(c1, c2, t) {
+    const hex = s => parseInt(s, 16);
+    const r1 = hex(c1.slice(1,3)), g1 = hex(c1.slice(3,5)), b1 = hex(c1.slice(5,7));
+    const r2 = hex(c2.slice(1,3)), g2 = hex(c2.slice(3,5)), b2 = hex(c2.slice(5,7));
+    const r = Math.round(r1 + (r2-r1)*t).toString(16).padStart(2,'0');
+    const g = Math.round(g1 + (g2-g1)*t).toString(16).padStart(2,'0');
+    const b = Math.round(b1 + (b2-b1)*t).toString(16).padStart(2,'0');
+    return `#${r}${g}${b}`;
+}
+
+// ── 地图点击：最近邻匹配 ──────────────────────────────────
+map.on('click', function(e) {
+    if (allGwrData.length === 0) return;
+
+    const { lat, lng } = e.latlng;
+
+    if (userMarker) {
+        userMarker.setLatLng(e.latlng);
+    } else {
+        userMarker = L.marker(e.latlng, {
+            icon: L.divIcon({
+                className: '',
+                html: `<div style="
+                    width:14px; height:14px;
+                    background:#2196F3; border:2px solid #fff;
+                    border-radius:50%; box-shadow:0 0 8px #2196F3;
+                "></div>`,
+                iconAnchor: [7, 7]
+            })
+        }).addTo(map);
+    }
+
+    // 最近邻搜索
+    let nearest = null, minDist = Infinity;
+    allGwrData.forEach(p => {
+        const d = e.latlng.distanceTo(L.latLng(p.lat, p.lon));
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+
+    currentPointData = nearest;
+
+    document.getElementById('location-badge').innerHTML = `
+        <strong>基准点：</strong>小区 #${nearest.id}<br>
+        <span style="color:#5a8aaa; font-size:0.72rem;">
+            坐标 (${lat.toFixed(4)}, ${lng.toFixed(4)}) · 匹配距离 ${Math.round(minDist)} 米
+        </span>
+    `;
+
+    document.getElementById('final-price').textContent = '—';
+    document.getElementById('result-unit').style.display = 'none';
+    document.getElementById('result-range').textContent = '';
+
+    userMarker.bindPopup(`
+        <b style="color:#2196F3;">预测基准点</b><br>
+        匹配小区 #${nearest.id}，相距 ${Math.round(minDist)} 米<br>
+        <small style="color:#888;">基准截距：${Math.round(nearest.intercept).toLocaleString()} 元/㎡</small>
+    `).openPopup();
+});
+
+// ── 核心预测逻辑 ──────────────────────────────────────────
+window.calculatePrice = function() {
+    if (!currentPointData) {
+        alert('请先在地图上点击选择一个基准点！');
+        return;
+    }
+
+    const coefs = currentPointData.coefs || {};
+    const intercept = currentPointData.intercept || 0;
+
+    const vals = {
+        school:  parseFloat(document.getElementById('input-school').value)  || 0,
+        traffic: parseFloat(document.getElementById('input-traffic').value) || 0,
+        medical: parseFloat(document.getElementById('input-medical').value) || 0,
+        far:     parseFloat(document.getElementById('input-far').value)     || 0,
+        green:   parseFloat(document.getElementById('input-green').value)   || 0,
+    };
+
+    // GWR 模型：使用空间局部系数
+    let price = intercept
+        + (coefs['离学校距离']   || 0) * vals.school
+        + (coefs['离交通距离']   || 0) * vals.traffic
+        + (coefs['医疗']         || 0) * vals.medical
+        + (coefs['容积率']       || 0) * vals.far
+        + (coefs['绿化率']       || 0) * vals.green;
+
+    // MLR / Lasso：全局系数（示例，可替换为真实系数）
+    if (currentModel === 'mlr' || currentModel === 'lasso') {
+        const globalCoefs = {
+            mlr:   { school: -200, traffic: -150, medical: 300, far: 500, green: 200, intercept: 14000 },
+            lasso: { school: -180, traffic: -120, medical: 280, far: 450, green: 0,   intercept: 14000 }
+        }[currentModel];
+        price = globalCoefs.intercept
+            + globalCoefs.school  * vals.school
+            + globalCoefs.traffic * vals.traffic
+            + globalCoefs.medical * vals.medical
+            + globalCoefs.far     * vals.far
+            + globalCoefs.green   * vals.green;
+    }
+
+    if (price < 0) price = 0;
+
+    document.getElementById('final-price').textContent = price.toFixed(0);
+    document.getElementById('result-unit').style.display = 'block';
+
+    // 简单置信区间提示（±10%）
+    const lo = Math.round(price * 0.9).toLocaleString();
+    const hi = Math.round(price * 1.1).toLocaleString();
+    document.getElementById('result-range').textContent = `参考区间：${lo} ~ ${hi} 元/㎡`;
+};
+</script>
+</body>
+</html>

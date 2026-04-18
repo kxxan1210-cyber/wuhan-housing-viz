@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>武汉市房价空间预测与可视化系统</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+    <style>
+        body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: 'Microsoft YaHei', sans-serif;}
+        #sidebar { width: 350px; background-color: #f8f9fa; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.1); z-index: 1000; overflow-y: auto;}
+        #map { flex: 1; height: 100%; }
+        h2 { font-size: 1.2rem; color: #333; }
+        .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>📊 武汉市房价预测系统</h2>
+        
+        <div class="card">
+            <h3>模型性能对比 (R²)</h3>
+            <div id="chart-r2" style="width: 100%; height: 200px;"></div>
+        </div>
+
+        <div class="card" id="calculator-panel" style="display: none;">
+            <h3 style="margin-top: 0; color: #ff7800;">📍 自定义位置预测</h3>
+            <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px;">
+                当前预测基准点: <br>
+                <span id="calc-id" style="font-weight: bold; color: #2196F3;">未选择</span>
+            </p>
+
+            <p style="font-size: 0.8rem; color: #999; margin-bottom: 10px;">
+                💡 提示：输入框内需填入经过标准化处理的值（0代表全市平均水平，正数代表优于平均，负数代表低于平均）。
+            </p>
+
+            <div style="margin-bottom: 8px;">
+                <label style="display: inline-block; width: 120px; font-size: 0.9rem;">距学校距离 (标准值):</label>
+                <input type="number" id="input-school" step="0.1" value="0" style="width: 80px; padding: 3px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="display: inline-block; width: 120px; font-size: 0.9rem;">距交通设施 (标准值):</label>
+                <input type="number" id="input-traffic" step="0.1" value="0" style="width: 80px; padding: 3px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="display: inline-block; width: 120px; font-size: 0.9rem;">周边医疗 (标准值):</label>
+                <input type="number" id="input-medical" step="0.1" value="0" style="width: 80px; padding: 3px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="display: inline-block; width: 120px; font-size: 0.9rem;">小区容积率 (标准值):</label>
+                <input type="number" id="input-far" step="0.1" value="0" style="width: 80px; padding: 3px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="display: inline-block; width: 120px; font-size: 0.9rem;">小区绿化率 (标准值):</label>
+                <input type="number" id="input-green" step="0.1" value="0" style="width: 80px; padding: 3px;">
+            </div>
+
+            <button onclick="calculatePrice()" style="width: 100%; padding: 10px; background-color: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 15px; box-shadow: 0 2px 5px rgba(33,150,243,0.3);">
+                🚀 执行智能预测
+            </button>
+            
+            <div style="text-align: center; margin-top: 15px; padding: 10px; background: #f1f8e9; border-radius: 5px;">
+                <span style="font-size: 0.9rem; color: #555;">预测单价</span><br>
+                <span id="final-price" style="color: #4caf50; font-size: 1.8em; font-weight: bold;">---</span> <span style="color: #4caf50;">元/㎡</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. 初始化地图
+        const map = L.map('map').setView([30.5928, 114.3055], 11);
+        L.tileLayer('http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+            subdomains: ["1", "2", "3", "4"],
+            attribution: '© 高德地图',
+            maxZoom: 18
+        }).addTo(map);
+
+        // 2. 绘制 ECharts 模型对比图
+        const chartDom = document.getElementById('chart-r2');
+        const myChart = echarts.init(chartDom);
+        myChart.setOption({
+            tooltip: {},
+            xAxis: { type: 'category', data: ['MLR', 'Lasso', 'GWR'] },
+            yAxis: { type: 'value', max: 1 },
+            series: [{
+                data: [0.0454, 0.0454, 0.7043],
+                type: 'bar',
+                itemStyle: { color: '#4caf50' },
+                label: { show: true, position: 'top' }
+            }]
+        });
+
+        // ==========================================
+        // 核心预测与交互逻辑
+        // ==========================================
+        let currentPointData = null; // 当前正在使用的系数点
+        let allGwrData = [];         // 存储所有下载好的 JSON 数据
+        let userMarker = null;       // 用户自定义选点的图钉标记
+
+        // 3. 读取 JSON 数据并在地图上打底图散点
+        fetch('gwr_coefficients.json')
+            .then(response => response.json())
+            .then(data => {
+                console.log("成功加载 GWR 数据：", data.length, "条");
+                allGwrData = data; 
+                
+                data.forEach(point => {
+                    L.circleMarker([point.lat, point.lon], {
+                        radius: 4, fillColor: "#ff7800", color: "#fff", weight: 1, opacity: 1, fillOpacity: 0.5
+                    }).addTo(map);
+                });
+            })
+            .catch(error => console.error("读取 JSON 失败", error));
+
+        // 4. 全局地图点击事件监听 (最近邻空间匹配)
+        map.on('click', function(e) {
+            if (allGwrData.length === 0) return; 
+
+            const clickLat = e.latlng.lat;
+            const clickLng = e.latlng.lng;
+
+            if (userMarker) {
+                userMarker.setLatLng(e.latlng); 
+            } else {
+                userMarker = L.marker([clickLat, clickLng]).addTo(map); 
+            }
+
+            let nearestPoint = null;
+            let minDistance = Infinity;
+
+            // 遍历寻找距离点击位置最近的已知小区
+            allGwrData.forEach(point => {
+                const distance = e.latlng.distanceTo(L.latLng(point.lat, point.lon));
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestPoint = point;
+                }
+            });
+
+            currentPointData = nearestPoint;
+            
+            // 更新左侧面板 UI
+            document.getElementById('calculator-panel').style.display = 'block';
+            document.getElementById('calc-id').innerHTML = `自定义经纬度<br><span style="font-size:0.8em; color:#888;">(借用近邻系数 ID: ${nearestPoint.id}, 相距 ${Math.round(minDistance)} 米)</span>`;
+            document.getElementById('final-price').innerText = '---';
+
+            // 弹窗提示
+            userMarker.bindPopup(`<b>新建预测点</b><br>已匹配 ${Math.round(minDistance)} 米外的区域环境特征`).openPopup();
+        });
+
+        // 5. 核心预测算法：GWR 前端实时推理
+        window.calculatePrice = function() {
+            if (!currentPointData) {
+                alert("请先在地图上点击选择一个基准点！");
+                return;
+            }
+
+            const coefs = currentPointData.coefs || {};
+            const intercept = currentPointData.intercept || 0;
+
+            const vSchool = parseFloat(document.getElementById('input-school').value) || 0;
+            const vTraffic = parseFloat(document.getElementById('input-traffic').value) || 0;
+            const vMedical = parseFloat(document.getElementById('input-medical').value) || 0;
+            const vFar = parseFloat(document.getElementById('input-far').value) || 0;
+            const vGreen = parseFloat(document.getElementById('input-green').value) || 0;
+
+            const cSchool = coefs['距学校距离'] || 0;
+            const cTraffic = coefs['距交通设施距离'] || 0;
+            const cMedical = coefs['医疗'] || 0;
+            const cFar = coefs['容积率'] || 0;
+            const cGreen = coefs['绿化率'] || 0;
+
+            let predictedPrice = intercept 
+                               + (cSchool * vSchool)
+                               + (cTraffic * vTraffic)
+                               + (cMedical * vMedical)
+                               + (cFar * vFar)
+                               + (cGreen * vGreen);
+
+            if (predictedPrice < 0) predictedPrice = 0;
+
+            document.getElementById('final-price').innerText = predictedPrice.toFixed(2);
+        };
+    </script>
+</body>
+</html>
