@@ -577,10 +577,8 @@ window.calculatePrice = function() {
     // 构建完整特征向量：用户输入的用实际值，其余用均值
     const rawVals = featureOrder.map(f => {
         if (f in userInput) return userInput[f];
-        // 对数变换字段根据对应原始字段推算
         if (f === 'log_离学校距离') return Math.log1p(means['离学校距离']);
         if (f === 'log_离交通距离') return Math.log1p(means['离交通距离']);
-        if (f === 'log_到光谷距离') return Math.log1p(userInput['到光谷核心区距离(km)'] || means['到光谷核心区距离(km)']);
         if (f === '学区_距离交互') return means['学区等级'] / (means['离学校距离'] + 1);
         return means[f] || 0;
     });
@@ -588,8 +586,9 @@ window.calculatePrice = function() {
     // 标准化
     const xScaled = rawVals.map((v, i) => (v - scalerMean[i]) / scalerScale[i]);
 
-    // GWR：用局部系数点积
-    let price = xScaled.reduce((sum, x, i) => sum + x * (coefs[featureOrder[i]] || 0), 0);
+    // GWR：截距 + 标准化特征与局部系数的点积
+    const predBase = xScaled.reduce((sum, x, i) => sum + x * (coefs[featureOrder[i]] || 0), 0);
+    let price = (currentPointData.intercept || 0) + predBase;
 
     // MLR / Lasso：全局系数（示例值）
     if (currentModel === 'mlr' || currentModel === 'lasso') {
