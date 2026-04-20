@@ -13,45 +13,46 @@
             margin: 0; padding: 0;
             display: flex; height: 100vh;
             font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-            background: #0f1923;
-            color: #e0e6f0;
+            background: #f0f4f8;
+            color: #2d3748;
         }
 
         /* ── 侧边栏 ── */
         #sidebar {
             width: 380px; min-width: 320px;
-            background: linear-gradient(180deg, #141e2e 0%, #0f1923 100%);
-            border-right: 1px solid #1e3050;
+            background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+            border-right: 1px solid #e2e8f0;
             display: flex; flex-direction: column;
             z-index: 1000; overflow-y: auto;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.06);
         }
 
         #sidebar-header {
             padding: 20px 20px 12px;
-            border-bottom: 1px solid #1e3050;
-            background: linear-gradient(135deg, #0d2137 0%, #1a3a5c 100%);
+            border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(135deg, #ebf4ff 0%, #dbeafe 100%);
         }
 
         #sidebar-header h1 {
             margin: 0 0 4px;
             font-size: 1.05rem;
             font-weight: 700;
-            color: #7ec8e3;
+            color: #1d4ed8;
             letter-spacing: 1px;
         }
 
         #sidebar-header p {
             margin: 0;
             font-size: 0.75rem;
-            color: #5a7a9a;
+            color: #64748b;
         }
 
-        .section { padding: 16px 20px; border-bottom: 1px solid #1a2d45; }
+        .section { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
 
         .section-title {
             font-size: 0.78rem;
             font-weight: 600;
-            color: #4a90d9;
+            color: #3b82f6;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             margin: 0 0 12px;
@@ -65,18 +66,18 @@
 
         .tab-btn {
             flex: 1; padding: 7px 4px;
-            background: #1a2d45; border: 1px solid #1e3a5a;
-            border-radius: 6px; color: #7a9ab8;
+            background: #f1f5f9; border: 1px solid #cbd5e1;
+            border-radius: 6px; color: #64748b;
             font-size: 0.8rem; cursor: pointer;
             transition: all 0.2s;
         }
 
         .tab-btn.active {
-            background: #1a4a7a; border-color: #2a7abf;
-            color: #7ec8e3; font-weight: 600;
+            background: #dbeafe; border-color: #3b82f6;
+            color: #1d4ed8; font-weight: 600;
         }
 
-        .tab-btn:hover:not(.active) { background: #1e3550; color: #a0c0d8; }
+        .tab-btn:hover:not(.active) { background: #e2e8f0; color: #475569; }
 
         /* ── 模型指标卡 ── */
         .metrics-grid {
@@ -85,19 +86,19 @@
         }
 
         .metric-card {
-            background: #1a2d45; border-radius: 8px;
-            padding: 10px 12px; border: 1px solid #1e3a5a;
+            background: #f8fafc; border-radius: 8px;
+            padding: 10px 12px; border: 1px solid #e2e8f0;
         }
 
-        .metric-label { font-size: 0.7rem; color: #5a7a9a; margin-bottom: 4px; }
+        .metric-label { font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; }
 
         .metric-value {
             font-size: 1.3rem; font-weight: 700;
-            color: #7ec8e3;
+            color: #3b82f6;
         }
 
-        .metric-value.good { color: #4caf50; }
-        .metric-value.warn { color: #ff9800; }
+        .metric-value.good { color: #16a34a; }
+        .metric-value.warn { color: #d97706; }
 
         /* ── R² 对比图 ── */
         #chart-r2 { width: 100%; height: 180px; }
@@ -106,20 +107,20 @@
         #calculator-panel { display: none; }
 
         .location-badge {
-            background: #1a2d45; border-radius: 6px;
+            background: #eff6ff; border-radius: 6px;
             padding: 8px 12px; margin-bottom: 12px;
-            border-left: 3px solid #2a7abf;
-            font-size: 0.8rem; color: #a0c0d8;
+            border-left: 3px solid #3b82f6;
+            font-size: 0.8rem; color: #475569;
             line-height: 1.6;
         }
 
-        .location-badge strong { color: #7ec8e3; }
+        .location-badge strong { color: #1d4ed8; }
 
         .input-group { margin-bottom: 10px; }
 
         .input-group label {
             display: block; font-size: 0.78rem;
-            color: #7a9ab8; margin-bottom: 4px;
+            color: #64748b; margin-bottom: 4px;
         }
 
         .input-row {
@@ -127,31 +128,31 @@
         }
 
         .input-row input[type="range"] {
-            flex: 1; accent-color: #2a7abf;
+            flex: 1; accent-color: #3b82f6;
             cursor: pointer;
         }
 
         .input-row input[type="number"] {
             width: 68px; padding: 4px 6px;
-            background: #1a2d45; border: 1px solid #2a4a6a;
-            border-radius: 4px; color: #e0e6f0;
+            background: #f8fafc; border: 1px solid #cbd5e1;
+            border-radius: 4px; color: #2d3748;
             font-size: 0.82rem; text-align: center;
         }
 
         .input-row input[type="number"]:focus {
-            outline: none; border-color: #2a7abf;
+            outline: none; border-color: #3b82f6;
         }
 
         .hint-text {
-            font-size: 0.72rem; color: #4a6a8a;
+            font-size: 0.72rem; color: #94a3b8;
             margin-bottom: 12px; line-height: 1.5;
-            padding: 8px 10px; background: #111d2c;
+            padding: 8px 10px; background: #f1f5f9;
             border-radius: 5px;
         }
 
         .predict-btn {
             width: 100%; padding: 11px;
-            background: linear-gradient(135deg, #1a5a9a, #2a7abf);
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
             color: white; border: none; border-radius: 7px;
             cursor: pointer; font-size: 0.9rem; font-weight: 600;
             letter-spacing: 1px;
@@ -165,21 +166,21 @@
         /* ── 预测结果 ── */
         #result-box {
             margin-top: 14px; padding: 14px;
-            background: #111d2c; border-radius: 8px;
-            border: 1px solid #1e3a5a; text-align: center;
+            background: #f0fdf4; border-radius: 8px;
+            border: 1px solid #bbf7d0; text-align: center;
         }
 
-        #result-box .result-label { font-size: 0.78rem; color: #5a7a9a; margin-bottom: 6px; }
+        #result-box .result-label { font-size: 0.78rem; color: #94a3b8; margin-bottom: 6px; }
 
         #result-box .result-value {
             font-size: 2rem; font-weight: 700;
-            color: #4caf50; line-height: 1;
+            color: #16a34a; line-height: 1;
         }
 
-        #result-box .result-unit { font-size: 0.85rem; color: #4caf50; margin-top: 4px; }
+        #result-box .result-unit { font-size: 0.85rem; color: #16a34a; margin-top: 4px; }
 
         #result-box .result-range {
-            font-size: 0.72rem; color: #4a6a8a;
+            font-size: 0.72rem; color: #94a3b8;
             margin-top: 8px;
         }
 
@@ -188,11 +189,12 @@
 
         /* ── 地图图例 ── */
         .map-legend {
-            background: rgba(15, 25, 35, 0.88);
-            border: 1px solid #1e3050;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid #e2e8f0;
             border-radius: 8px; padding: 10px 14px;
-            color: #a0c0d8; font-size: 0.75rem;
+            color: #475569; font-size: 0.75rem;
             line-height: 1.8;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
 
         .legend-dot {
@@ -203,7 +205,7 @@
         /* ── 加载状态 ── */
         #loading-overlay {
             position: fixed; inset: 0;
-            background: rgba(10, 16, 25, 0.92);
+            background: rgba(240, 244, 248, 0.92);
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
             z-index: 9999; transition: opacity 0.4s;
@@ -213,8 +215,8 @@
 
         .spinner {
             width: 40px; height: 40px;
-            border: 3px solid #1e3050;
-            border-top-color: #2a7abf;
+            border: 3px solid #e2e8f0;
+            border-top-color: #3b82f6;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-bottom: 14px;
@@ -222,16 +224,16 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .loading-text { color: #5a7a9a; font-size: 0.85rem; }
+        .loading-text { color: #94a3b8; font-size: 0.85rem; }
 
         /* ── 滚动条 ── */
         #sidebar::-webkit-scrollbar { width: 4px; }
         #sidebar::-webkit-scrollbar-track { background: transparent; }
-        #sidebar::-webkit-scrollbar-thumb { background: #1e3050; border-radius: 2px; }
+        #sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
         /* ── 响应式 ── */
         @media (max-width: 700px) {
-            #sidebar { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid #1e3050; }
+            #sidebar { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid #e2e8f0; }
             body { flex-direction: column; }
             #map { height: 50vh; }
         }
