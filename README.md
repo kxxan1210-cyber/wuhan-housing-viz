@@ -15,13 +15,123 @@
 │
 └── 后端模型（PycharmProjects/pythonProject/）
     ├── models2.py             # 核心模型文件（主要代码）
+    ├── export_gwr.py          # 导出 gwr_coefficients.json 的脚本
     ├── 筛选后数据26.csv        # 数据源（2842 条小区数据）
-    ├── app.py                 # Flask 后端服务 v1
-    ├── app2.py                # Flask 后端服务 v2
-    ├── models.py              # 早期模型版本（已弃用）
-    ├── models222.py           # 实验版本（已弃用）
     └── 选最优带宽.py           # GWR 带宽调优独立脚本
 ```
+
+> 注：前端为纯静态页面，无需启动服务器，直接用浏览器打开 `index_v2.html` 即可。`models2.py` 和 `export_gwr.py` 仅用于训练模型和生成 JSON 数据文件。
+
+---
+
+## 核心文件说明
+
+### `models2.py` — 模型核心
+
+包含三个回归模型的完整实现：
+
+| 函数 | 说明 |
+|------|------|
+| `load_data()` | 读取 CSV，清洗数据，进行特征工程 |
+| `build_ols(df)` | 多元线性回归（MLR） |
+| `build_lasso(df)` | Lasso 回归（自动交叉验证选 alpha） |
+| `build_gwr(df)` | 地理加权回归（GWR，自动 CV 选最优带宽） |
+| `predict_ols/lasso/gwr()` | 单点预测接口 |
+| `get_map_data(df)` | 返回地图所需数据 |
+| `get_feature_stats(df)` | 返回各特征统计信息 |
+
+#### 输入特征（共 25 个）
+
+**基础特征：** 容积率、绿化率、总户数、在售/在租房源、离学校/交通距离、周边 POI 数量（学校/餐饮/风景/交通/购物/生活服务/医疗）、到光谷核心区距离、光谷辐射度、学区等级、人均 GDP
+
+**特征工程（新增）：**
+- `房龄` — 由竣工时间计算
+- `物业费数值` — 从文本中提取数值
+- `停车比` — 从"1:X"格式中提取
+- `是否商品房` — 二值哑变量
+- `log_离学校距离` / `log_离交通距离` / `log_到光谷距离` — 对数变换
+- `学区_距离交互` — 学区等级 ÷ 离学校距离
+
+#### 模型结果
+
+| 模型 | R² | RMSE（元/㎡） |
+|------|----|--------------|
+| MLR（多元线性回归） | 0.5005 | 4421.64 |
+| Lasso 回归 | 0.5038 | 4407.29 |
+| GWR（地理加权回归） | 0.6322 | 3909.86 |
+
+> 注：添加特征工程后，R² 相比初版（约 0.29）提升约 70%。
+
+---
+
+### `export_gwr.py` — 导出脚本
+
+运行后重新训练 GWR 模型并将局部系数、特征均值、标准化参数导出为 `gwr_coefficients.json`，供前端直接使用。
+
+```python
+# 在 PyCharm 中直接运行即可
+python export_gwr.py
+```
+
+> ⚠️ GWR 带宽搜索（LOO-CV）在 2842 条数据上需要几分钟，请耐心等待。
+
+---
+
+### `index_v2.html` — 可视化前端
+
+纯前端单页应用，无需服务器，直接用浏览器打开即可。
+
+主要功能：
+- **模型对比卡片** — 切换查看三个模型的 R² 和 RMSE
+- **R² 对比柱状图** — 基于 ECharts 绘制
+- **GWR 空间系数地图** — 展示各小区的局部回归系数
+- **自定义位置预测** — 点击地图选点，输入特征值预测房价
+
+---
+
+### `筛选后数据26.csv` — 数据源
+
+武汉光谷区域住宅小区数据，主要字段包括：
+
+> 小区名称、行政区域、商圈板块、经度、纬度、每平方单价、容积率、绿化率、总户数、竣工时间、物业费、停车位、权属类别、学区等级、各类 POI 距离与数量、人均 GDP 等
+
+---
+
+## 运行方式
+
+### 查看可视化页面
+
+直接用浏览器打开：
+```
+Desktop/Wuhan_Housing_Viz/index_v2.html
+```
+
+### 重新生成 GWR 系数数据
+
+在 PyCharm 中运行：
+```python
+python export_gwr.py
+```
+
+运行完成后将生成的 `gwr_coefficients.json` 复制到 `Desktop/Wuhan_Housing_Viz/` 目录下。
+
+---
+
+## 依赖环境
+
+```
+Python 3.x
+pandas
+numpy
+scikit-learn
+scipy
+```
+
+安装依赖：
+```bash
+pip install pandas numpy scikit-learn scipy
+```
+
 
 ---
 
@@ -69,14 +179,7 @@
 样本数: 2842
 GWR 带宽搜索中...
   bandwidth=0.0471  CV-RMSE=4579.55
-  bandwidth=0.0714  CV-RMSE=9380.17
-  bandwidth=0.0919  CV-RMSE=13434.72
-  bandwidth=0.1118  CV-RMSE=16022.78
-  bandwidth=0.1332  CV-RMSE=17911.51
-  bandwidth=0.1582  CV-RMSE=19448.81
-  bandwidth=0.1895  CV-RMSE=20782.94
-  bandwidth=0.2316  CV-RMSE=21948.87
-  bandwidth=0.2998  CV-RMSE=22998.14
+  ...
 最优带宽: 0.0471  CV-RMSE: 4579.55
 GWR R²=0.6322  RMSE=3909.86
 MLR   R²=0.5005   RMSE=4421.64
