@@ -370,6 +370,7 @@ const MODEL_STATS = {
 let currentModel = 'gwr';
 let currentPointData = null;
 let allGwrData = [];
+let gwrMeta = null;
 let userMarker = null;
 let gwrMarkers = [];
 
@@ -457,14 +458,14 @@ function syncRange(key) {
 fetch('gwr_coefficients.json')
     .then(r => r.json())
     .then(data => {
-        allGwrData = data;
-        console.log('GWR 数据加载完成：', data.length, '条');
+        gwrMeta = data;
+        allGwrData = data.points;
+        console.log('GWR 数据加载完成：', allGwrData.length, '条');
 
-        // 按 intercept 值着色（热力感）
-        const intercepts = data.map(d => d.intercept);
+        const intercepts = allGwrData.map(d => d.intercept);
         const minI = Math.min(...intercepts), maxI = Math.max(...intercepts);
 
-        data.forEach(point => {
+        allGwrData.forEach(point => {
             const t = (point.intercept - minI) / (maxI - minI);
             const color = interpolateColor('#1a6abf', '#ff7800', t);
             const m = L.circleMarker([point.lat, point.lon], {
@@ -558,47 +559,53 @@ window.calculatePrice = function() {
     }
 
     const coefs = currentPointData.coefs || {};
-    const intercept = currentPointData.intercept || 0;
+    const means = gwrMeta.feature_means;
+    const featureOrder = gwrMeta.feature_order;
+    const scalerMean = gwrMeta.scaler_mean;
+    const scalerScale = gwrMeta.scaler_scale;
 
-    const vals = {
-        guanggu:  parseFloat(document.getElementById('input-guanggu').value)  || 0,
-        far:      parseFloat(document.getElementById('input-far').value)      || 0,
-        green:    parseFloat(document.getElementById('input-green').value)    || 0,
-        property: parseFloat(document.getElementById('input-property').value) || 0,
-        school:   parseFloat(document.getElementById('input-school').value)   || 0,
-        medical:  parseFloat(document.getElementById('input-medical').value)  || 0,
+    // 前端输入的 6 个字段（实际值）
+    const userInput = {
+        '到光谷核心区距离(km)': parseFloat(document.getElementById('input-guanggu').value) || 0,
+        '容积率':               parseFloat(document.getElementById('input-far').value)     || 0,
+        '绿化率':               parseFloat(document.getElementById('input-green').value)   || 0,
+        '物业费数值':           parseFloat(document.getElementById('input-property').value)|| 0,
+        '学校':                 parseFloat(document.getElementById('input-school').value)  || 0,
+        '医疗':                 parseFloat(document.getElementById('input-medical').value) || 0,
     };
 
-    // GWR 模型：使用空间局部系数
-    let price = intercept
-        + (coefs['到光谷核心区距离'] || 0) * vals.guanggu
-        + (coefs['容积率']           || 0) * vals.far
-        + (coefs['绿化率']           || 0) * vals.green
-        + (coefs['物业费']           || 0) * vals.property
-        + (coefs['学校']             || 0) * vals.school
-        + (coefs['医疗']             || 0) * vals.medical;
+    // 构建完整特征向量：用户输入的用实际值，其余用均值
+    const rawVals = featureOrder.map(f => {
+        if (f in userInput) return userInput[f];
+        // 对数变换字段根据对应原始字段推算
+        if (f === 'log_离学校距离') return Math.log1p(means['离学校距离']);
+        if (f === 'log_离交通距离') return Math.log1p(means['离交通距离']);
+        if (f === 'log_到光谷距离') return Math.log1p(userInput['到光谷核心区距离(km)'] || means['到光谷核心区距离(km)']);
+        if (f === '学区_距离交互') return means['学区等级'] / (means['离学校距离'] + 1);
+        return means[f] || 0;
+    });
 
-    // MLR / Lasso：全局系数（示例，可替换为真实系数）
+    // 标准化
+    const xScaled = rawVals.map((v, i) => (v - scalerMean[i]) / scalerScale[i]);
+
+    // GWR：用局部系数点积
+    let price = xScaled.reduce((sum, x, i) => sum + x * (coefs[featureOrder[i]] || 0), 0);
+
+    // MLR / Lasso：全局系数（示例值）
     if (currentModel === 'mlr' || currentModel === 'lasso') {
         const globalCoefs = {
-            mlr:   { guanggu: -500, far: 400, green: 150, property: 800, school: 200, medical: 100, intercept: 14000 },
-            lasso: { guanggu: -480, far: 350, green: 100, property: 750, school: 180, medical:   0, intercept: 14000 }
+            mlr:   { '到光谷核心区距离(km)': -500, '容积率': 400, '绿化率': 150, '物业费数值': 800, '学校': 200, '医疗': 100, intercept: 14000 },
+            lasso: { '到光谷核心区距离(km)': -480, '容积率': 350, '绿化率': 100, '物业费数值': 750, '学校': 180, '医疗':   0, intercept: 14000 }
         }[currentModel];
         price = globalCoefs.intercept
-            + globalCoefs.guanggu  * vals.guanggu
-            + globalCoefs.far      * vals.far
-            + globalCoefs.green    * vals.green
-            + globalCoefs.property * vals.property
-            + globalCoefs.school   * vals.school
-            + globalCoefs.medical  * vals.medical;
+            + Object.keys(userInput).reduce((sum, f) => sum + (globalCoefs[f] || 0) * userInput[f], 0);
     }
 
     if (price < 0) price = 0;
 
-    document.getElementById('final-price').textContent = price.toFixed(0);
+    document.getElementById('final-price').textContent = Math.round(price).toLocaleString();
     document.getElementById('result-unit').style.display = 'block';
 
-    // 简单置信区间提示（±10%）
     const lo = Math.round(price * 0.9).toLocaleString();
     const hi = Math.round(price * 1.1).toLocaleString();
     document.getElementById('result-range').textContent = `参考区间：${lo} ~ ${hi} 元/㎡`;
