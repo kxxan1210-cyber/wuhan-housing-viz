@@ -292,47 +292,54 @@
         </div>
 
         <div class="hint-text">
-            💡 输入框为标准化值：0 = 全市平均水平，正数 = 优于平均，负数 = 低于平均。<br>
-            拖动滑块或直接输入数值。
+            💡 拖动滑块或直接输入数值，所有字段均为实际值。
         </div>
 
         <div class="input-group">
-            <label>离学校距离（标准值）</label>
+            <label>到光谷核心区距离（km）</label>
             <div class="input-row">
-                <input type="range" id="range-school" min="-3" max="3" step="0.1" value="0" oninput="syncInput('school')">
-                <input type="number" id="input-school" step="0.1" value="0" oninput="syncRange('school')">
+                <input type="range" id="range-guanggu" min="0" max="30" step="0.1" value="5" oninput="syncInput('guanggu')">
+                <input type="number" id="input-guanggu" step="0.1" value="5" oninput="syncRange('guanggu')">
             </div>
         </div>
 
         <div class="input-group">
-            <label>离交通设施距离（标准值）</label>
+            <label>容积率</label>
             <div class="input-row">
-                <input type="range" id="range-traffic" min="-3" max="3" step="0.1" value="0" oninput="syncInput('traffic')">
-                <input type="number" id="input-traffic" step="0.1" value="0" oninput="syncRange('traffic')">
+                <input type="range" id="range-far" min="0.5" max="6" step="0.1" value="2.5" oninput="syncInput('far')">
+                <input type="number" id="input-far" step="0.1" value="2.5" oninput="syncRange('far')">
             </div>
         </div>
 
         <div class="input-group">
-            <label>周边医疗数量（标准值）</label>
+            <label>绿化率（%）</label>
             <div class="input-row">
-                <input type="range" id="range-medical" min="-3" max="3" step="0.1" value="0" oninput="syncInput('medical')">
-                <input type="number" id="input-medical" step="0.1" value="0" oninput="syncRange('medical')">
+                <input type="range" id="range-green" min="10" max="60" step="1" value="35" oninput="syncInput('green')">
+                <input type="number" id="input-green" step="1" value="35" oninput="syncRange('green')">
             </div>
         </div>
 
         <div class="input-group">
-            <label>小区容积率（标准值）</label>
+            <label>物业费（元/㎡/月）</label>
             <div class="input-row">
-                <input type="range" id="range-far" min="-3" max="3" step="0.1" value="0" oninput="syncInput('far')">
-                <input type="number" id="input-far" step="0.1" value="0" oninput="syncRange('far')">
+                <input type="range" id="range-property" min="0.5" max="6" step="0.1" value="2" oninput="syncInput('property')">
+                <input type="number" id="input-property" step="0.1" value="2" oninput="syncRange('property')">
             </div>
         </div>
 
         <div class="input-group">
-            <label>小区绿化率（标准值）</label>
+            <label>周边学校数量</label>
             <div class="input-row">
-                <input type="range" id="range-green" min="-3" max="3" step="0.1" value="0" oninput="syncInput('green')">
-                <input type="number" id="input-green" step="0.1" value="0" oninput="syncRange('green')">
+                <input type="range" id="range-school" min="0" max="50" step="1" value="10" oninput="syncInput('school')">
+                <input type="number" id="input-school" step="1" value="10" oninput="syncRange('school')">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>周边医疗数量</label>
+            <div class="input-row">
+                <input type="range" id="range-medical" min="0" max="30" step="1" value="5" oninput="syncInput('medical')">
+                <input type="number" id="input-medical" step="1" value="5" oninput="syncRange('medical')">
             </div>
         </div>
 
@@ -554,33 +561,36 @@ window.calculatePrice = function() {
     const intercept = currentPointData.intercept || 0;
 
     const vals = {
-        school:  parseFloat(document.getElementById('input-school').value)  || 0,
-        traffic: parseFloat(document.getElementById('input-traffic').value) || 0,
-        medical: parseFloat(document.getElementById('input-medical').value) || 0,
-        far:     parseFloat(document.getElementById('input-far').value)     || 0,
-        green:   parseFloat(document.getElementById('input-green').value)   || 0,
+        guanggu:  parseFloat(document.getElementById('input-guanggu').value)  || 0,
+        far:      parseFloat(document.getElementById('input-far').value)      || 0,
+        green:    parseFloat(document.getElementById('input-green').value)    || 0,
+        property: parseFloat(document.getElementById('input-property').value) || 0,
+        school:   parseFloat(document.getElementById('input-school').value)   || 0,
+        medical:  parseFloat(document.getElementById('input-medical').value)  || 0,
     };
 
     // GWR 模型：使用空间局部系数
     let price = intercept
-        + (coefs['离学校距离']   || 0) * vals.school
-        + (coefs['离交通距离']   || 0) * vals.traffic
-        + (coefs['医疗']         || 0) * vals.medical
-        + (coefs['容积率']       || 0) * vals.far
-        + (coefs['绿化率']       || 0) * vals.green;
+        + (coefs['到光谷核心区距离'] || 0) * vals.guanggu
+        + (coefs['容积率']           || 0) * vals.far
+        + (coefs['绿化率']           || 0) * vals.green
+        + (coefs['物业费']           || 0) * vals.property
+        + (coefs['学校']             || 0) * vals.school
+        + (coefs['医疗']             || 0) * vals.medical;
 
     // MLR / Lasso：全局系数（示例，可替换为真实系数）
     if (currentModel === 'mlr' || currentModel === 'lasso') {
         const globalCoefs = {
-            mlr:   { school: -200, traffic: -150, medical: 300, far: 500, green: 200, intercept: 14000 },
-            lasso: { school: -180, traffic: -120, medical: 280, far: 450, green: 0,   intercept: 14000 }
+            mlr:   { guanggu: -500, far: 400, green: 150, property: 800, school: 200, medical: 100, intercept: 14000 },
+            lasso: { guanggu: -480, far: 350, green: 100, property: 750, school: 180, medical:   0, intercept: 14000 }
         }[currentModel];
         price = globalCoefs.intercept
-            + globalCoefs.school  * vals.school
-            + globalCoefs.traffic * vals.traffic
-            + globalCoefs.medical * vals.medical
-            + globalCoefs.far     * vals.far
-            + globalCoefs.green   * vals.green;
+            + globalCoefs.guanggu  * vals.guanggu
+            + globalCoefs.far      * vals.far
+            + globalCoefs.green    * vals.green
+            + globalCoefs.property * vals.property
+            + globalCoefs.school   * vals.school
+            + globalCoefs.medical  * vals.medical;
     }
 
     if (price < 0) price = 0;
