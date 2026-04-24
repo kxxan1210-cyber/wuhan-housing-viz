@@ -100,8 +100,9 @@
         .metric-value.good { color: #16a34a; }
         .metric-value.warn { color: #d97706; }
 
-        /* ── R² 对比图 ── */
-        #chart-r2 { width: 100%; height: 180px; }
+        /* ── 分析图表 ── */
+        #chart-area { width: 100%; height: 240px; }
+        #chart-year  { width: 100%; height: 200px; }
 
         /* ── 预测面板 ── */
         #calculator-panel { display: none; }
@@ -231,6 +232,30 @@
         #sidebar::-webkit-scrollbar-track { background: transparent; }
         #sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
+        /* ── 热力图切换 ── */
+        .heatmap-toggle {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 12px;
+            background: #f8fafc; border-radius: 8px;
+            border: 1px solid #e2e8f0; cursor: pointer;
+            font-size: 0.8rem; color: #475569;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        .heatmap-toggle:hover { background: #eff6ff; }
+        .heatmap-toggle input[type="checkbox"] { accent-color: #3b82f6; width: 15px; height: 15px; cursor: pointer; }
+        .heatmap-toggle.active { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
+
+        .heatmap-legend {
+            margin-top: 10px;
+            height: 12px; border-radius: 6px;
+            background: linear-gradient(to right, #313695, #4575b4, #fee090, #f46d43, #a50026);
+        }
+        .heatmap-legend-labels {
+            display: flex; justify-content: space-between;
+            font-size: 0.68rem; color: #94a3b8; margin-top: 3px;
+        }
+
         /* ── 响应式 ── */
         @media (max-width: 700px) {
             #sidebar { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid #e2e8f0; }
@@ -276,10 +301,33 @@
         </div>
     </div>
 
-    <!-- R² 对比图 -->
+    <!-- 热门区域均价柱状图 -->
     <div class="section">
-        <div class="section-title">模型性能对比 (R²)</div>
-        <div id="chart-r2"></div>
+        <div class="section-title">热门区域均价（元/㎡）</div>
+        <div id="chart-area"></div>
+    </div>
+
+    <!-- 建成年代饼图 -->
+    <div class="section">
+        <div class="section-title">房屋建成年代对比</div>
+        <div id="chart-year"></div>
+    </div>
+
+    <!-- 热力图控制 -->
+    <div class="section">
+        <div class="section-title">热力图</div>
+        <label class="heatmap-toggle" id="heatmap-toggle-label">
+            <input type="checkbox" id="heatmap-toggle" onchange="toggleHeatmap(this.checked)">
+            显示光谷辐射度热力图
+        </label>
+        <div id="heatmap-legend-wrap" style="display:none; margin-top:10px;">
+            <div class="heatmap-legend"></div>
+            <div class="heatmap-legend-labels">
+                <span id="legend-min">低</span>
+                <span>房价</span>
+                <span id="legend-max">高</span>
+            </div>
+        </div>
     </div>
 
     <!-- 预测面板 -->
@@ -359,6 +407,7 @@
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
 // ── 模型数据 ──────────────────────────────────────────────
 const MODEL_STATS = {
@@ -397,34 +446,125 @@ legend.onAdd = () => {
 };
 legend.addTo(map);
 
-// ── ECharts R² 对比图 ─────────────────────────────────────
-const myChart = echarts.init(document.getElementById('chart-r2'), 'dark');
-myChart.setOption({
+// ── ECharts 热门区域均价柱状图（真实数据） ────────────────
+const chartArea = echarts.init(document.getElementById('chart-area'), 'dark');
+chartArea.setOption({
     backgroundColor: 'transparent',
-    tooltip: { formatter: p => `${p.name}<br/>R² = ${p.value}` },
-    grid: { top: 10, bottom: 30, left: 40, right: 10 },
+    tooltip: {
+        trigger: 'axis',
+        formatter: p => `${p[0].name}<br/>均价：<b>${p[0].value.toLocaleString()}</b> 元/㎡`
+    },
+    grid: { top: 8, bottom: 60, left: 44, right: 10 },
     xAxis: {
         type: 'category',
-        data: ['MLR', 'Lasso', 'GWR'],
-        axisLabel: { color: '#7a9ab8', fontSize: 11 },
+        data: ['武昌','江岸','江汉','洪山','硚口','青山','汉阳','江夏','沌口','东西湖','黄陂','蔡甸','汉南','新洲'],
+        axisLabel: { color: '#7a9ab8', fontSize: 9, rotate: 35 },
         axisLine: { lineStyle: { color: '#1e3050' } }
     },
     yAxis: {
-        type: 'value', min: 0, max: 1,
-        axisLabel: { color: '#7a9ab8', fontSize: 10 },
+        type: 'value',
+        axisLabel: {
+            color: '#7a9ab8', fontSize: 9,
+            formatter: v => (v / 1000).toFixed(0) + 'k'
+        },
         splitLine: { lineStyle: { color: '#1a2d45' } }
     },
     series: [{
-        data: [
-            { value: 0.5005, itemStyle: { color: '#ff9800' } },
-            { value: 0.5038, itemStyle: { color: '#ff9800' } },
-            { value: 0.6322, itemStyle: { color: '#4caf50' } }
-        ],
         type: 'bar',
-        barMaxWidth: 40,
-        label: { show: true, position: 'top', color: '#a0c0d8', fontSize: 11 }
+        barMaxWidth: 22,
+        data: [
+            { value: 17449, itemStyle: { color: '#ef4444' } },
+            { value: 16530, itemStyle: { color: '#ef4444' } },
+            { value: 14983, itemStyle: { color: '#f97316' } },
+            { value: 14936, itemStyle: { color: '#f97316' } },
+            { value: 12583, itemStyle: { color: '#eab308' } },
+            { value: 12259, itemStyle: { color: '#eab308' } },
+            { value: 12023, itemStyle: { color: '#eab308' } },
+            { value:  9687, itemStyle: { color: '#3b82f6' } },
+            { value:  9498, itemStyle: { color: '#3b82f6' } },
+            { value:  9004, itemStyle: { color: '#3b82f6' } },
+            { value:  6721, itemStyle: { color: '#22c55e' } },
+            { value:  6045, itemStyle: { color: '#22c55e' } },
+            { value:  5006, itemStyle: { color: '#22c55e' } },
+            { value:  4922, itemStyle: { color: '#22c55e' } }
+        ]
     }]
 });
+
+// ── ECharts 建成年代饼图（真实数据） ─────────────────────
+const chartYear = echarts.init(document.getElementById('chart-year'), 'dark');
+chartYear.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { formatter: p => `${p.name}<br/>${p.value} 套（${p.percent}%）` },
+    legend: {
+        orient: 'vertical',
+        right: 4,
+        top: 'center',
+        textStyle: { color: '#7a9ab8', fontSize: 9 },
+        itemWidth: 10, itemHeight: 10
+    },
+    series: [{
+        type: 'pie',
+        radius: ['34%', '62%'],
+        center: ['36%', '50%'],
+        label: {
+            formatter: '{d}%',
+            color: '#a0c0d8',
+            fontSize: 9
+        },
+        labelLine: { length: 5, length2: 5 },
+        data: [
+            { name: '2000年前',   value: 1729, itemStyle: { color: '#6366f1' } },
+            { name: '2000-2004', value: 1490, itemStyle: { color: '#3b82f6' } },
+            { name: '2005-2009', value: 1106, itemStyle: { color: '#22c55e' } },
+            { name: '2010-2014', value: 1072, itemStyle: { color: '#eab308' } },
+            { name: '2015-2019', value: 1109, itemStyle: { color: '#f97316' } },
+            { name: '2020年后',   value:  526, itemStyle: { color: '#ef4444' } }
+        ]
+    }]
+});
+
+let heatLayer = null;
+
+function toggleHeatmap(enabled) {
+    const label = document.getElementById('heatmap-toggle-label');
+    const legendWrap = document.getElementById('heatmap-legend-wrap');
+
+    if (enabled) {
+        if (!heatLayer && allGwrData.length > 0) {
+            buildHeatLayer();
+        }
+        if (heatLayer) heatLayer.addTo(map);
+        label.classList.add('active');
+        legendWrap.style.display = 'block';
+    } else {
+        if (heatLayer) map.removeLayer(heatLayer);
+        label.classList.remove('active');
+        legendWrap.style.display = 'none';
+    }
+}
+
+function buildHeatLayer() {
+    // 使用高斯距离衰减辐射度（radiation）作为热力图强度
+    const radiations = allGwrData.map(d => d.radiation != null ? d.radiation : 0);
+    const minR = Math.min(...radiations);
+    const maxR = Math.max(...radiations);
+
+    document.getElementById('legend-min').textContent = minR.toFixed(2);
+    document.getElementById('legend-max').textContent = maxR.toFixed(2);
+
+    const points = allGwrData.map(d => {
+        const intensity = (radiations[allGwrData.indexOf(d)] - minR) / (maxR - minR + 1e-9);
+        return [d.lat, d.lon, intensity];
+    });
+
+    heatLayer = L.heatLayer(points, {
+        radius: 35,
+        blur: 28,
+        maxZoom: 14,
+        gradient: { 0.0: '#313695', 0.25: '#4575b4', 0.5: '#fee090', 0.75: '#f46d43', 1.0: '#a50026' }
+    });
+}
 
 // ── 模型切换 ──────────────────────────────────────────────
 function switchModel(model) {
@@ -482,8 +622,8 @@ fetch('gwr_coefficients.json')
             gwrMarkers.push(m);
         });
 
+        buildHeatLayer();
         document.getElementById('loading-overlay').classList.add('hidden');
-        // 显示预测面板（等待地图点击）
         document.getElementById('calculator-panel').style.display = 'block';
     })
     .catch(err => {
