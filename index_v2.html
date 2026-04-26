@@ -600,6 +600,16 @@ fetch('gwr_coefficients.json')
     .then(data => {
         gwrMeta = data;
         allGwrData = data.points;
+
+        // 用 JSON 里的真实指标更新 MODEL_STATS
+        if (data.model_stats) {
+            MODEL_STATS.mlr.r2    = data.model_stats.mlr.r2;
+            MODEL_STATS.mlr.rmse  = data.model_stats.mlr.rmse;
+            MODEL_STATS.lasso.r2  = data.model_stats.lasso.r2;
+            MODEL_STATS.lasso.rmse= data.model_stats.lasso.rmse;
+            MODEL_STATS.gwr.r2    = data.model_stats.gwr.r2;
+            MODEL_STATS.gwr.rmse  = data.model_stats.gwr.rmse;
+        }
         console.log('GWR 数据加载完成：', allGwrData.length, '条');
 
         const intercepts = allGwrData.map(d => d.intercept);
@@ -730,14 +740,14 @@ window.calculatePrice = function() {
     const predBase = xScaled.reduce((sum, x, i) => sum + x * (coefs[featureOrder[i]] || 0), 0);
     let price = (currentPointData.intercept || 0) + predBase;
 
-    // MLR / Lasso：全局系数（示例值）
+    // MLR / Lasso：使用 JSON 中的真实系数（标准化空间）
     if (currentModel === 'mlr' || currentModel === 'lasso') {
-        const globalCoefs = {
-            mlr:   { '到光谷核心区距离(km)': -500, '容积率': 400, '绿化率': 150, '物业费数值': 800, '学校': 200, '医疗': 100, intercept: 14000 },
-            lasso: { '到光谷核心区距离(km)': -480, '容积率': 350, '绿化率': 100, '物业费数值': 750, '学校': 180, '医疗':   0, intercept: 14000 }
-        }[currentModel];
-        price = globalCoefs.intercept
-            + Object.keys(userInput).reduce((sum, f) => sum + (globalCoefs[f] || 0) * userInput[f], 0);
+        const isMLR  = currentModel === 'mlr';
+        const coefMap = isMLR ? gwrMeta.mlr_coef   : gwrMeta.lasso_coef;
+        const intcpt  = isMLR ? gwrMeta.mlr_intercept : gwrMeta.lasso_intercept;
+        if (coefMap && intcpt !== undefined) {
+            price = intcpt + xScaled.reduce((sum, x, i) => sum + x * (coefMap[featureOrder[i]] || 0), 0);
+        }
     }
 
     if (price < 0) price = 0;
