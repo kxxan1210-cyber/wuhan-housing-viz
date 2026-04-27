@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>武汉市房价空间预测与可视化系统 v2</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
@@ -99,10 +100,6 @@
 
         .metric-value.good { color: #16a34a; }
         .metric-value.warn { color: #d97706; }
-
-        /* ── 分析图表 ── */
-        #chart-area { width: 100%; height: 240px; }
-        #chart-year  { width: 100%; height: 200px; }
 
         /* ── 预测面板 ── */
         #calculator-panel { display: none; }
@@ -203,29 +200,31 @@
             border-radius: 50%; margin-right: 6px; vertical-align: middle;
         }
 
-        /* ── 加载状态 ── */
+        /* ── 加载状态（右下角小提示，不阻塞页面） ── */
         #loading-overlay {
-            position: fixed; inset: 0;
-            background: rgba(240, 244, 248, 0.92);
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            z-index: 9999; transition: opacity 0.4s;
+            position: fixed; bottom: 20px; right: 20px;
+            background: rgba(255,255,255,0.96);
+            border: 1px solid #e2e8f0;
+            border-radius: 10px; padding: 10px 16px;
+            display: flex; align-items: center; gap: 10px;
+            z-index: 9999; transition: opacity 0.4s, transform 0.4s;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
         }
 
-        #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        #loading-overlay.hidden { opacity: 0; pointer-events: none; transform: translateY(8px); }
 
         .spinner {
-            width: 40px; height: 40px;
-            border: 3px solid #e2e8f0;
+            width: 18px; height: 18px;
+            border: 2px solid #e2e8f0;
             border-top-color: #3b82f6;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
-            margin-bottom: 14px;
+            flex-shrink: 0;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .loading-text { color: #94a3b8; font-size: 0.85rem; }
+        .loading-text { color: #64748b; font-size: 0.8rem; white-space: nowrap; }
 
         /* ── 滚动条 ── */
         #sidebar::-webkit-scrollbar { width: 4px; }
@@ -262,6 +261,167 @@
             body { flex-direction: column; }
             #map { height: 50vh; }
         }
+
+        /* ══ 导航切换 ══ */
+        .nav-tabs { display: flex; gap: 6px; margin-top: 10px; }
+        .nav-tab {
+            flex: 1; padding: 6px 4px;
+            background: rgba(255,255,255,0.45); border: 1px solid #93c5fd;
+            border-radius: 6px; color: #1d4ed8;
+            font-size: 0.78rem; cursor: pointer;
+            transition: all 0.2s; font-weight: 500;
+        }
+        .nav-tab.active { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600; }
+        .nav-tab:hover:not(.active) { background: rgba(255,255,255,0.7); }
+
+        /* ══ 对比面板 ══ */
+        #compare-panel {
+            display: none; flex: 1; height: 100%;
+            overflow-y: auto; background: #f0f4f8;
+            padding: 20px; flex-direction: column; gap: 16px;
+        }
+        .cmp-summary { display: flex; gap: 12px; }
+        .cmp-stat-card {
+            flex: 1; text-align: center; padding: 12px 8px;
+            background: #fff; border-radius: 10px; border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .cmp-stat-v { font-size: 1.1rem; font-weight: 700; color: #2563eb; }
+        .cmp-stat-l { font-size: 0.68rem; color: #94a3b8; margin-top: 3px; }
+        .cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .cmp-card {
+            background: #fff; border-radius: 12px; padding: 16px;
+            border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        }
+        .cmp-card.full { grid-column: 1 / -1; }
+        .cmp-title {
+            font-size: 0.78rem; font-weight: 600; color: #3b82f6;
+            text-transform: uppercase; letter-spacing: 1.2px; margin: 0 0 12px;
+        }
+
+        /* ══ 对比点管理 ══ */
+        .cmp-point-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 10px; background: #f8fafc;
+            border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 6px;
+        }
+        .cmp-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+        .cmp-name { flex: 1; font-size: 0.78rem; color: #475569; }
+        .cmp-price { font-size: 0.82rem; font-weight: 700; color: #1d4ed8; }
+        .cmp-del {
+            background: none; border: none; color: #cbd5e1;
+            cursor: pointer; font-size: 1.1rem; padding: 0 2px; line-height: 1;
+        }
+        .cmp-del:hover { color: #ef4444; }
+        .add-cmp-btn {
+            width: 100%; padding: 9px; background: #eff6ff;
+            border: 1.5px dashed #93c5fd; border-radius: 6px;
+            color: #3b82f6; font-size: 0.78rem; cursor: pointer;
+            transition: all 0.2s; text-align: center; display: block;
+        }
+        .add-cmp-btn:hover:not([disabled]) { background: #dbeafe; border-color: #3b82f6; }
+        .add-cmp-btn.selecting { background: #fef9c3; border-color: #fbbf24; color: #92400e; animation: blink 1s infinite; }
+        .add-cmp-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.6} }
+        .select-hint {
+            display: none; margin-top: 8px; padding: 8px 10px;
+            background: #fef9c3; border-radius: 6px; font-size: 0.78rem;
+            color: #92400e; border-left: 3px solid #fbbf24; line-height: 1.5;
+        }
+        .cmp-clear-btn {
+            width: 100%; padding: 7px; background: transparent;
+            border: 1px solid #fca5a5; border-radius: 6px;
+            color: #ef4444; font-size: 0.76rem; cursor: pointer;
+            margin-top: 8px; transition: all 0.2s;
+        }
+        .cmp-clear-btn:hover { background: #fef2f2; }
+        .cmp-empty { font-size: 0.78rem; color: #94a3b8; text-align: center; padding: 12px 0; font-style: italic; }
+
+        /* ══ 对比数据表格 ══ */
+        .cmp-data-tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .cmp-data-tbl th {
+            padding: 8px 14px; background: #f8fafc; text-align: left;
+            font-size: 0.72rem; font-weight: 600; color: #64748b;
+            border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+        }
+        .cmp-data-tbl th.pt-col { text-align: center; border-left: 1px solid #e2e8f0; }
+        .cmp-data-tbl td { padding: 7px 14px; border-bottom: 1px solid #f1f5f9; color: #475569; white-space: nowrap; }
+        .cmp-data-tbl td.pt-val { text-align: center; font-weight: 600; border-left: 1px solid #f1f5f9; }
+        .cmp-data-tbl tr:last-child td { border-bottom: none; }
+        .cmp-data-tbl tr:hover td { background: #fafbfc; }
+        .cmp-data-tbl .sec-row td { background: #f1f5f9; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.8px; padding: 4px 14px; }
+        .val-pos { color: #2563eb; }
+        .val-neg { color: #ef4444; }
+        .val-price { color: #16a34a; }
+
+        /* ══ 数据查询页面 ══ */
+        #query-panel {
+            display: none; flex: 1; height: 100%; overflow-y: auto;
+            background: #f0f4f8; padding: 20px; flex-direction: column; gap: 12px;
+        }
+        .qry-header {
+            background: #fff; border-radius: 10px; padding: 12px 16px;
+            border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .qry-count { font-size: 0.82rem; color: #64748b; }
+        .qry-count strong { color: #1d4ed8; font-size: 1rem; }
+        .qry-sort-hint { font-size: 0.72rem; color: #94a3b8; }
+        .qry-table-card {
+            background: #fff; border-radius: 10px; border: 1px solid #e2e8f0;
+            overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        }
+        .qry-table { width: 100%; border-collapse: collapse; }
+        .qry-table th {
+            padding: 10px 12px; background: #f8fafc; font-size: 0.74rem;
+            font-weight: 600; color: #475569; text-align: left;
+            border-bottom: 2px solid #e2e8f0; cursor: pointer;
+            user-select: none; white-space: nowrap;
+        }
+        .qry-table th:hover { background: #eff6ff; color: #1d4ed8; }
+        .qry-table th.sort-asc::after { content: ' ↑'; color: #3b82f6; }
+        .qry-table th.sort-desc::after { content: ' ↓'; color: #3b82f6; }
+        .qry-table td { padding: 9px 12px; font-size: 0.8rem; color: #475569; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+        .qry-table tr:last-child td { border-bottom: none; }
+        .qry-table tr:hover td { background: #f8fafc; }
+        .qry-price-high { color: #ef4444; font-weight: 700; }
+        .qry-price-mid { color: #f97316; font-weight: 700; }
+        .qry-price-low { color: #16a34a; font-weight: 700; }
+        .qry-tag { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.7rem; font-weight: 500; }
+        .qry-tag-blue { background: #eff6ff; color: #1d4ed8; }
+        .qry-tag-green { background: #f0fdf4; color: #16a34a; }
+        .qry-no-result { text-align: center; padding: 48px 20px; color: #94a3b8; font-size: 0.88rem; }
+        .qry-pagination { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 14px; flex-wrap: wrap; }
+        .pg-btn {
+            min-width: 30px; padding: 5px 9px; background: #f8fafc;
+            border: 1px solid #e2e8f0; border-radius: 5px;
+            font-size: 0.78rem; color: #475569; cursor: pointer; transition: all 0.15s; text-align: center;
+        }
+        .pg-btn:hover:not([disabled]):not(.pg-active) { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+        .pg-active { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600; }
+        .pg-btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+
+        /* ══ 查询侧边栏筛选器 ══ */
+        .filter-group { margin-bottom: 11px; }
+        .filter-group label { display: block; font-size: 0.74rem; color: #64748b; font-weight: 500; margin-bottom: 5px; }
+        .filter-select, .filter-num {
+            width: 100%; padding: 7px 10px; background: #f8fafc;
+            border: 1px solid #cbd5e1; border-radius: 6px;
+            font-size: 0.8rem; color: #2d3748;
+        }
+        .filter-select:focus, .filter-num:focus { outline: none; border-color: #3b82f6; }
+        .filter-range-row { display: flex; gap: 6px; align-items: center; }
+        .filter-range-row .filter-num, .filter-range-row .filter-select { flex: 1; }
+        .filter-range-sep { font-size: 0.78rem; color: #94a3b8; flex-shrink: 0; }
+        .qry-btn {
+            width: 100%; padding: 9px; border: none; border-radius: 7px;
+            font-size: 0.84rem; font-weight: 600; cursor: pointer;
+            transition: opacity 0.2s; margin-bottom: 8px; display: block;
+        }
+        .qry-btn-search { background: linear-gradient(135deg, #2563eb, #3b82f6); color: #fff; }
+        .qry-btn-search:hover { opacity: 0.88; }
+        .qry-btn-reset { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; margin-bottom: 0; }
+        .qry-btn-reset:hover { background: #e2e8f0; opacity: 1; }
     </style>
 </head>
 <body>
@@ -277,6 +437,11 @@
     <div id="sidebar-header">
         <h1>武汉市房价空间预测系统</h1>
         <p>MLR · Lasso · 地理加权回归 (GWR)</p>
+        <div class="nav-tabs">
+            <button class="nav-tab active" id="tab-predict" onclick="switchPage('predict')">地图预测</button>
+            <button class="nav-tab" id="tab-compare" onclick="switchPage('compare')">房价对比</button>
+            <button class="nav-tab" id="tab-query" onclick="switchPage('query')">数据查询</button>
+        </div>
     </div>
 
     <!-- 模型切换 -->
@@ -299,18 +464,6 @@
                 <div class="metric-value" id="metric-rmse">—</div>
             </div>
         </div>
-    </div>
-
-    <!-- 热门区域均价柱状图 -->
-    <div class="section">
-        <div class="section-title">热门区域均价（元/㎡）</div>
-        <div id="chart-area"></div>
-    </div>
-
-    <!-- 建成年代饼图 -->
-    <div class="section">
-        <div class="section-title">房屋建成年代对比</div>
-        <div id="chart-year"></div>
     </div>
 
     <!-- 热力图控制 -->
@@ -401,15 +554,197 @@
         </div>
     </div>
 
+    <!-- ══ 对比点管理（对比模式专用） ══ -->
+    <div class="section" id="compare-sidebar" style="display:none;">
+        <div class="section-title">对比点管理</div>
+        <div id="cmp-points-list">
+            <div class="cmp-empty">暂无对比点，请点击下方按钮在地图上选点</div>
+        </div>
+        <button class="add-cmp-btn" id="add-cmp-btn" onclick="startAddComparePoint()">
+            + 在地图上添加对比点（最多3个）
+        </button>
+        <div class="select-hint" id="select-hint">
+            请点击地图任意位置选择对比点，系统自动匹配最近已知小区
+        </div>
+        <button class="cmp-clear-btn" id="cmp-clear-btn" onclick="clearComparePoints()" style="display:none;">
+            清空所有对比点
+        </button>
+    </div>
+    <!-- ══ 数据查询筛选器（查询模式专用） ══ -->
+    <div class="section" id="query-sidebar" style="display:none;">
+        <div class="section-title">数据筛选</div>
+
+        <div class="filter-group">
+            <label>小区名称</label>
+            <input type="text" class="filter-select" id="flt-name" placeholder="输入关键词搜索…">
+        </div>
+        <div class="filter-group">
+            <label>区域</label>
+            <select class="filter-select" id="flt-district">
+                <option value="">全部区域</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>开发商</label>
+            <select class="filter-select" id="flt-developer">
+                <option value="">全部开发商</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>户型</label>
+            <select class="filter-select" id="flt-type">
+                <option value="">全部户型</option>
+                <option>一室一厅</option><option>两室一厅</option>
+                <option>两室两厅</option><option>三室一厅</option>
+                <option>三室两厅</option><option>四室两厅</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>建成年份</label>
+            <div class="filter-range-row">
+                <select class="filter-select" id="flt-year-min"><option value="">起始年</option></select>
+                <span class="filter-range-sep">~</span>
+                <select class="filter-select" id="flt-year-max"><option value="">结束年</option></select>
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>单价区间（元/㎡）</label>
+            <div class="filter-range-row">
+                <input type="number" class="filter-num" id="flt-price-min" placeholder="最低">
+                <span class="filter-range-sep">~</span>
+                <input type="number" class="filter-num" id="flt-price-max" placeholder="最高">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>容积率</label>
+            <div class="filter-range-row">
+                <input type="number" class="filter-num" id="flt-far-min" placeholder="最低" step="0.1" min="0">
+                <span class="filter-range-sep">~</span>
+                <input type="number" class="filter-num" id="flt-far-max" placeholder="最高" step="0.1" min="0">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>绿化率（%）</label>
+            <div class="filter-range-row">
+                <input type="number" class="filter-num" id="flt-green-min" placeholder="最低" min="0" max="100">
+                <span class="filter-range-sep">~</span>
+                <input type="number" class="filter-num" id="flt-green-max" placeholder="最高" min="0" max="100">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>物业费（元/㎡·月）</label>
+            <div class="filter-range-row">
+                <input type="number" class="filter-num" id="flt-fee-min" placeholder="最低" step="0.1" min="0">
+                <span class="filter-range-sep">~</span>
+                <input type="number" class="filter-num" id="flt-fee-max" placeholder="最高" step="0.1" min="0">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>周边学校数量</label>
+            <div class="filter-range-row">
+                <input type="number" class="filter-num" id="flt-schools-min" placeholder="最少" min="0">
+                <span class="filter-range-sep">~</span>
+                <input type="number" class="filter-num" id="flt-schools-max" placeholder="最多" min="0">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>周边医疗数量</label>
+            <div class="filter-range-row">
+                <input type="number" class="filter-num" id="flt-medical-min" placeholder="最少" min="0">
+                <span class="filter-range-sep">~</span>
+                <input type="number" class="filter-num" id="flt-medical-max" placeholder="最多" min="0">
+            </div>
+        </div>
+        <button class="qry-btn qry-btn-search" onclick="applyFilters()">查 询</button>
+        <button class="qry-btn qry-btn-reset" onclick="resetFilters()">重 置</button>
+    </div>
+
 </div>
 
 <!-- ══ 地图 ══ -->
 <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- ══ 对比分析面板 ══ -->
+<div id="compare-panel">
+    <div class="cmp-summary">
+        <div class="cmp-stat-card">
+            <div class="cmp-stat-v">14</div>
+            <div class="cmp-stat-l">覆盖区域</div>
+        </div>
+        <div class="cmp-stat-card">
+            <div class="cmp-stat-v">11,176</div>
+            <div class="cmp-stat-l">全市均价（元/㎡）</div>
+        </div>
+        <div class="cmp-stat-card">
+            <div class="cmp-stat-v" id="cmp-stat-pts">0</div>
+            <div class="cmp-stat-l">已选对比点</div>
+        </div>
+    </div>
+
+    <div class="cmp-grid">
+        <div class="cmp-card full">
+            <div class="cmp-title">各区域房价排行（元/㎡）</div>
+            <div id="chart-cmp-district" style="width:100%;height:260px;"></div>
+        </div>
+        <div class="cmp-card full">
+            <div class="cmp-title">房屋建成年代分布</div>
+            <div id="chart-cmp-year" style="width:100%;height:260px;"></div>
+        </div>
+        <div class="cmp-card full" id="cmp-data-table-card" style="display:none;">
+            <div class="cmp-title">选点属性对比</div>
+            <div id="cmp-data-table-wrap" style="overflow-x:auto;"></div>
+        </div>
+        <div class="cmp-card full" id="cmp-points-chart-card" style="display:none;">
+            <div class="cmp-title">选点价格对比分析</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div>
+                    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:8px;text-align:center;">三模型预测价格（元/㎡）</div>
+                    <div id="chart-cmp-bar" style="width:100%;height:240px;"></div>
+                </div>
+                <div>
+                    <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:8px;text-align:center;">GWR 系数空间差异雷达图</div>
+                    <div id="chart-cmp-radar" style="width:100%;height:240px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 数据查询面板 ══ -->
+<div id="query-panel">
+    <div class="qry-header">
+        <span class="qry-count">共 <strong id="qry-count-num">0</strong> 条结果</span>
+        <span class="qry-sort-hint">点击表头可排序</span>
+    </div>
+    <div class="qry-table-card">
+        <div style="overflow-x:auto;">
+            <table class="qry-table" id="qry-table">
+                <thead><tr>
+                    <th data-field="name"      onclick="sortQuery('name')">小区名称</th>
+                    <th data-field="district"  onclick="sortQuery('district')">区域</th>
+                    <th data-field="developer" onclick="sortQuery('developer')">开发商</th>
+                    <th data-field="price"     onclick="sortQuery('price')">单价（元/㎡）</th>
+                    <th data-field="year"      onclick="sortQuery('year')">建成年份</th>
+                    <th data-field="type"      onclick="sortQuery('type')">主力户型</th>
+                    <th data-field="far"       onclick="sortQuery('far')">容积率</th>
+                    <th data-field="green"     onclick="sortQuery('green')">绿化率</th>
+                    <th data-field="fee"       onclick="sortQuery('fee')">物业费</th>
+                    <th data-field="schools"   onclick="sortQuery('schools')">周边学校</th>
+                    <th data-field="medical"   onclick="sortQuery('medical')">周边医疗</th>
+                </tr></thead>
+                <tbody id="qry-tbody"></tbody>
+            </table>
+        </div>
+        <div class="qry-pagination" id="qry-pagination"></div>
+    </div>
+</div>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
 // ── 模型数据 ──────────────────────────────────────────────
+// 安全网：最多 4 秒后强制隐藏 loading，避免 fetch 挂起时页面被阻塞
+const _loadingEl = document.getElementById('loading-overlay');
+const _loadingGuard = setTimeout(() => _loadingEl.classList.add('hidden'), 4000);
+
 const MODEL_STATS = {
     mlr:   { r2: '0.5005', rmse: '4421.64', r2Class: 'warn' },
     lasso: { r2: '0.5038', rmse: '4407.29', r2Class: 'warn' },
@@ -445,84 +780,6 @@ legend.onAdd = () => {
     return div;
 };
 legend.addTo(map);
-
-// ── ECharts 热门区域均价柱状图（真实数据） ────────────────
-const chartArea = echarts.init(document.getElementById('chart-area'), 'dark');
-chartArea.setOption({
-    backgroundColor: 'transparent',
-    tooltip: {
-        trigger: 'axis',
-        formatter: p => `${p[0].name}<br/>均价：<b>${p[0].value.toLocaleString()}</b> 元/㎡`
-    },
-    grid: { top: 8, bottom: 60, left: 44, right: 10 },
-    xAxis: {
-        type: 'category',
-        data: ['武昌','江岸','江汉','洪山','硚口','青山','汉阳','江夏','沌口','东西湖','黄陂','蔡甸','汉南','新洲'],
-        axisLabel: { color: '#7a9ab8', fontSize: 9, rotate: 35 },
-        axisLine: { lineStyle: { color: '#1e3050' } }
-    },
-    yAxis: {
-        type: 'value',
-        axisLabel: {
-            color: '#7a9ab8', fontSize: 9,
-            formatter: v => (v / 1000).toFixed(0) + 'k'
-        },
-        splitLine: { lineStyle: { color: '#1a2d45' } }
-    },
-    series: [{
-        type: 'bar',
-        barMaxWidth: 22,
-        data: [
-            { value: 17449, itemStyle: { color: '#ef4444' } },
-            { value: 16530, itemStyle: { color: '#ef4444' } },
-            { value: 14983, itemStyle: { color: '#f97316' } },
-            { value: 14936, itemStyle: { color: '#f97316' } },
-            { value: 12583, itemStyle: { color: '#eab308' } },
-            { value: 12259, itemStyle: { color: '#eab308' } },
-            { value: 12023, itemStyle: { color: '#eab308' } },
-            { value:  9687, itemStyle: { color: '#3b82f6' } },
-            { value:  9498, itemStyle: { color: '#3b82f6' } },
-            { value:  9004, itemStyle: { color: '#3b82f6' } },
-            { value:  6721, itemStyle: { color: '#22c55e' } },
-            { value:  6045, itemStyle: { color: '#22c55e' } },
-            { value:  5006, itemStyle: { color: '#22c55e' } },
-            { value:  4922, itemStyle: { color: '#22c55e' } }
-        ]
-    }]
-});
-
-// ── ECharts 建成年代饼图（真实数据） ─────────────────────
-const chartYear = echarts.init(document.getElementById('chart-year'), 'dark');
-chartYear.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { formatter: p => `${p.name}<br/>${p.value} 套（${p.percent}%）` },
-    legend: {
-        orient: 'vertical',
-        right: 4,
-        top: 'center',
-        textStyle: { color: '#7a9ab8', fontSize: 9 },
-        itemWidth: 10, itemHeight: 10
-    },
-    series: [{
-        type: 'pie',
-        radius: ['34%', '62%'],
-        center: ['36%', '50%'],
-        label: {
-            formatter: '{d}%',
-            color: '#a0c0d8',
-            fontSize: 9
-        },
-        labelLine: { length: 5, length2: 5 },
-        data: [
-            { name: '2000年前',   value: 1729, itemStyle: { color: '#6366f1' } },
-            { name: '2000-2004', value: 1490, itemStyle: { color: '#3b82f6' } },
-            { name: '2005-2009', value: 1106, itemStyle: { color: '#22c55e' } },
-            { name: '2010-2014', value: 1072, itemStyle: { color: '#eab308' } },
-            { name: '2015-2019', value: 1109, itemStyle: { color: '#f97316' } },
-            { name: '2020年后',   value:  526, itemStyle: { color: '#ef4444' } }
-        ]
-    }]
-});
 
 let heatLayer = null;
 
@@ -633,11 +890,13 @@ fetch('gwr_coefficients.json')
         });
 
         buildHeatLayer();
+        clearTimeout(_loadingGuard);
         document.getElementById('loading-overlay').classList.add('hidden');
         document.getElementById('calculator-panel').style.display = 'block';
     })
     .catch(err => {
         console.error('GWR 数据加载失败', err);
+        clearTimeout(_loadingGuard);
         document.getElementById('loading-overlay').classList.add('hidden');
     });
 
@@ -654,6 +913,10 @@ function interpolateColor(c1, c2, t) {
 
 // ── 地图点击：最近邻匹配 ──────────────────────────────────
 map.on('click', function(e) {
+    if (selectingComparePoint) {
+        handleCompareClick(e);
+        return;
+    }
     if (allGwrData.length === 0) return;
 
     const { lat, lng } = e.latlng;
@@ -759,6 +1022,527 @@ window.calculatePrice = function() {
     const hi = Math.round(price * 1.1).toLocaleString();
     document.getElementById('result-range').textContent = `参考区间：${lo} ~ ${hi} 元/㎡`;
 };
+
+// ── 对比页面 ──────────────────────────────────────────────
+
+let compareMode = false;
+let selectingComparePoint = false;
+let comparePoints = [];
+let queryInited = false;
+const CMP_COLORS = ['#ef4444', '#3b82f6', '#22c55e'];
+let chartCmpDistrict, chartCmpBar, chartCmpRadar;
+
+function switchPage(page) {
+    // Hide all main panels
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('compare-panel').style.display = 'none';
+    document.getElementById('query-panel').style.display = 'none';
+    // Hide all sidebar extras (except during map-selection flow)
+    if (!selectingComparePoint) {
+        document.getElementById('compare-sidebar').style.display = 'none';
+    }
+    document.getElementById('query-sidebar').style.display = 'none';
+    // Update tab active state
+    ['predict','compare','query'].forEach(p =>
+        document.getElementById('tab-' + p).classList.toggle('active', p === page)
+    );
+
+    if (page === 'compare') {
+        document.getElementById('compare-panel').style.display = 'flex';
+        document.getElementById('compare-sidebar').style.display = 'block';
+        compareMode = true;
+        setTimeout(initCompareCharts, 60);
+    } else if (page === 'query') {
+        document.getElementById('query-panel').style.display = 'flex';
+        document.getElementById('query-sidebar').style.display = 'block';
+        compareMode = false;
+        if (!queryInited) { initQueryPage(); queryInited = true; }
+        else renderQueryTable();
+    } else {
+        document.getElementById('map').style.display = 'block';
+        document.getElementById('map').style.flex = '1';
+        compareMode = false;
+        setTimeout(() => map.invalidateSize(), 60);
+        if (allGwrData.length > 0) {
+            document.getElementById('calculator-panel').style.display = 'block';
+        }
+    }
+}
+
+function initCompareCharts() {
+    renderCmpDistrict();
+    renderCmpYear();
+    if (comparePoints.length >= 2) renderCmpPoints();
+}
+
+function renderCmpDistrict() {
+    if (!chartCmpDistrict) chartCmpDistrict = echarts.init(document.getElementById('chart-cmp-district'));
+    const raw = [
+        {name:'武昌',v:17449},{name:'江岸',v:16530},{name:'江汉',v:14983},
+        {name:'洪山',v:14936},{name:'硚口',v:12583},{name:'青山',v:12259},
+        {name:'汉阳',v:12023},{name:'江夏',v:9687},{name:'沌口',v:9498},
+        {name:'东西湖',v:9004},{name:'黄陂',v:6721},{name:'蔡甸',v:6045},
+        {name:'汉南',v:5006},{name:'新洲',v:4922}
+    ].sort((a, b) => b.v - a.v);
+
+    chartCmpDistrict.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'axis', formatter: p => `${p[0].name}<br/>均价：<b>${p[0].value.toLocaleString()}</b> 元/㎡` },
+        grid: { top: 24, bottom: 52, left: 50, right: 20 },
+        xAxis: {
+            type: 'category', data: raw.map(d => d.name),
+            axisLabel: { fontSize: 10, rotate: 30, color: '#64748b' },
+            axisLine: { lineStyle: { color: '#e2e8f0' } }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { formatter: v => (v / 1000).toFixed(0) + 'k', fontSize: 10, color: '#94a3b8' },
+            splitLine: { lineStyle: { color: '#f1f5f9' } }
+        },
+        series: [{
+            type: 'bar', barMaxWidth: 32,
+            data: raw.map((d, i) => ({
+                value: d.v,
+                itemStyle: { color: i < 3 ? '#ef4444' : i < 6 ? '#f97316' : i < 9 ? '#3b82f6' : '#22c55e' }
+            })),
+            label: { show: true, position: 'top', formatter: p => (p.value / 1000).toFixed(1) + 'k', fontSize: 9, color: '#64748b' }
+        }]
+    });
+}
+
+function renderCmpYear() {
+    if (!window.chartCmpYear) window.chartCmpYear = echarts.init(document.getElementById('chart-cmp-year'));
+    const yearData = [
+        { name: '2000年前',   value: 1729, itemStyle: { color: '#6366f1' } },
+        { name: '2000-2004', value: 1490, itemStyle: { color: '#3b82f6' } },
+        { name: '2005-2009', value: 1106, itemStyle: { color: '#22c55e' } },
+        { name: '2010-2014', value: 1072, itemStyle: { color: '#eab308' } },
+        { name: '2015-2019', value: 1109, itemStyle: { color: '#f97316' } },
+        { name: '2020年后',   value:  526, itemStyle: { color: '#ef4444' } }
+    ];
+    const total = yearData.reduce((s, d) => s + d.value, 0);
+    window.chartCmpYear.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { formatter: p => `${p.name}<br/>${p.value} 套（${p.percent}%）` },
+        legend: {
+            orient: 'vertical', right: '4%', top: 'center',
+            textStyle: { color: '#64748b', fontSize: 10 },
+            itemWidth: 12, itemHeight: 12,
+            formatter: name => {
+                const d = yearData.find(x => x.name === name);
+                return d ? `${name}  ${d.value}套  ${(d.value/total*100).toFixed(1)}%` : name;
+            }
+        },
+        series: [{
+            type: 'pie',
+            radius: ['38%', '66%'],
+            center: ['30%', '50%'],
+            label: { show: false },
+            emphasis: {
+                label: { show: true, fontSize: 12, fontWeight: 'bold', formatter: '{b}\n{d}%' }
+            },
+            data: yearData
+        }]
+    });
+}
+
+// ── 对比点管理 ────────────────────────────────────────────
+
+function startAddComparePoint() {
+    if (comparePoints.length >= 3) return;
+    selectingComparePoint = true;
+    document.getElementById('add-cmp-btn').classList.add('selecting');
+    document.getElementById('add-cmp-btn').textContent = '正在选点…请切换到地图并点击位置';
+    document.getElementById('select-hint').style.display = 'block';
+    // Switch to map
+    document.getElementById('map').style.display = 'block';
+    document.getElementById('map').style.flex = '1';
+    document.getElementById('compare-panel').style.display = 'none';
+    document.getElementById('compare-sidebar').style.display = 'block';
+    setTimeout(() => map.invalidateSize(), 60);
+}
+
+function handleCompareClick(e) {
+    if (!selectingComparePoint || allGwrData.length === 0) return;
+    selectingComparePoint = false;
+    document.getElementById('add-cmp-btn').classList.remove('selecting');
+    document.getElementById('select-hint').style.display = 'none';
+
+    const { lat, lng } = e.latlng;
+    let nearest = null, minDist = Infinity;
+    allGwrData.forEach(p => {
+        const d = e.latlng.distanceTo(L.latLng(p.lat, p.lon));
+        if (d < minDist) { minDist = d; nearest = p; }
+    });
+
+    const idx = comparePoints.length;
+    const color = CMP_COLORS[idx];
+    const price = calcPointPrice(nearest, 'gwr');
+
+    const marker = L.circleMarker([nearest.lat, nearest.lon], {
+        radius: 10, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.9
+    }).addTo(map);
+    marker.bindTooltip(`对比点 ${idx + 1}：${Math.round(price).toLocaleString()} 元/㎡`, { permanent: false });
+
+    comparePoints.push({ id: nearest.id, pointData: nearest, price, marker, color, label: `对比点 ${idx + 1}` });
+    updateCmpList();
+
+    // Return to compare panel
+    setTimeout(() => {
+        document.getElementById('map').style.display = 'none';
+        document.getElementById('compare-panel').style.display = 'flex';
+        initCompareCharts();
+    }, 350);
+}
+
+function removeComparePoint(idx) {
+    if (comparePoints[idx].marker) map.removeLayer(comparePoints[idx].marker);
+    comparePoints.splice(idx, 1);
+    comparePoints.forEach((p, i) => { p.label = `对比点 ${i + 1}`; p.color = CMP_COLORS[i]; });
+    updateCmpList();
+    if (comparePoints.length < 2) {
+        document.getElementById('cmp-points-chart-card').style.display = 'none';
+        document.getElementById('cmp-data-table-card').style.display = 'none';
+    } else {
+        renderCmpPoints();
+    }
+}
+
+function clearComparePoints() {
+    comparePoints.forEach(p => { if (p.marker) map.removeLayer(p.marker); });
+    comparePoints = [];
+    updateCmpList();
+    document.getElementById('cmp-points-chart-card').style.display = 'none';
+    document.getElementById('cmp-data-table-card').style.display = 'none';
+}
+
+function updateCmpList() {
+    const list = document.getElementById('cmp-points-list');
+    if (comparePoints.length === 0) {
+        list.innerHTML = '<div class="cmp-empty">暂无对比点，请点击下方按钮在地图上选点</div>';
+    } else {
+        list.innerHTML = comparePoints.map((p, i) => `
+            <div class="cmp-point-row">
+                <div class="cmp-dot" style="background:${p.color}"></div>
+                <div class="cmp-name">${p.label}（#${p.id}）</div>
+                <div class="cmp-price">${Math.round(p.price).toLocaleString()} 元</div>
+                <button class="cmp-del" onclick="removeComparePoint(${i})">×</button>
+            </div>`).join('');
+    }
+
+    const btn = document.getElementById('add-cmp-btn');
+    if (comparePoints.length >= 3) {
+        btn.textContent = '已达最大对比点数量（3个）';
+        btn.disabled = true;
+    } else {
+        btn.textContent = `+ 在地图上添加对比点（${comparePoints.length}/3）`;
+        btn.disabled = false;
+    }
+    document.getElementById('cmp-clear-btn').style.display = comparePoints.length > 0 ? 'block' : 'none';
+    document.getElementById('cmp-stat-pts').textContent = comparePoints.length;
+}
+
+function calcPointPrice(pointData, model) {
+    if (!gwrMeta) return pointData.intercept || 0;
+    const means = gwrMeta.feature_means;
+    const featureOrder = gwrMeta.feature_order;
+    const scalerMean = gwrMeta.scaler_mean;
+    const scalerScale = gwrMeta.scaler_scale;
+
+    const rawVals = featureOrder.map(f => {
+        if (f === 'log_离学校距离') return Math.log1p(means['离学校距离']);
+        if (f === 'log_离交通距离') return Math.log1p(means['离交通距离']);
+        if (f === '学区_距离交互') return means['学区等级'] / (means['离学校距离'] + 1);
+        return means[f] || 0;
+    });
+    const xScaled = rawVals.map((v, i) => (v - scalerMean[i]) / scalerScale[i]);
+
+    if (model === 'gwr') {
+        const coefs = pointData.coefs || {};
+        return Math.max(0, (pointData.intercept || 0) + xScaled.reduce((s, x, i) => s + x * (coefs[featureOrder[i]] || 0), 0));
+    }
+    const coefMap = model === 'mlr' ? gwrMeta.mlr_coef : gwrMeta.lasso_coef;
+    const intcpt  = model === 'mlr' ? gwrMeta.mlr_intercept : gwrMeta.lasso_intercept;
+    if (!coefMap || intcpt === undefined) return 0;
+    return Math.max(0, intcpt + xScaled.reduce((s, x, i) => s + x * (coefMap[featureOrder[i]] || 0), 0));
+}
+
+function renderCmpPoints() {
+    if (comparePoints.length < 2) return;
+    document.getElementById('cmp-points-chart-card').style.display = 'block';
+
+    // Bar chart
+    if (!chartCmpBar) chartCmpBar = echarts.init(document.getElementById('chart-cmp-bar'));
+    chartCmpBar.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'axis', formatter: params => params.map(p => `${p.seriesName}：${p.value.toLocaleString()} 元/㎡`).join('<br/>') },
+        legend: { bottom: 0, textStyle: { fontSize: 9, color: '#64748b' } },
+        grid: { top: 20, bottom: 40, left: 50, right: 16 },
+        xAxis: { type: 'category', data: ['MLR', 'Lasso', 'GWR'], axisLabel: { fontSize: 11, color: '#64748b' } },
+        yAxis: { type: 'value', axisLabel: { formatter: v => (v / 1000).toFixed(0) + 'k', fontSize: 9, color: '#94a3b8' }, splitLine: { lineStyle: { color: '#f1f5f9' } } },
+        series: comparePoints.map(cp => ({
+            name: cp.label, type: 'bar', barGap: '8%',
+            data: ['mlr', 'lasso', 'gwr'].map(m => Math.round(calcPointPrice(cp.pointData, m))),
+            itemStyle: { color: cp.color },
+            label: { show: true, position: 'top', formatter: p => (p.value / 1000).toFixed(1) + 'k', fontSize: 9 }
+        }))
+    });
+
+    // Radar chart using normalized GWR coefficients
+    if (!gwrMeta || allGwrData.length === 0) return;
+    if (!chartCmpRadar) chartCmpRadar = echarts.init(document.getElementById('chart-cmp-radar'));
+
+    const features = Object.keys(allGwrData[0].coefs || {});
+    // Pick top 6 features by mean absolute value
+    const topFeatures = features.map(f => {
+        const vals = allGwrData.map(d => Math.abs(d.coefs[f] || 0));
+        return { name: f, absMax: Math.max(...vals), meanAbs: vals.reduce((s, v) => s + v, 0) / vals.length };
+    }).sort((a, b) => b.meanAbs - a.meanAbs).slice(0, 6);
+
+    chartCmpRadar.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {},
+        legend: { bottom: 0, textStyle: { fontSize: 9, color: '#64748b' } },
+        radar: {
+            indicator: topFeatures.map(f => ({ name: f.name.length > 6 ? f.name.slice(0, 6) + '…' : f.name, max: 100 })),
+            radius: '58%', center: ['50%', '46%'],
+            name: { textStyle: { color: '#64748b', fontSize: 9 } },
+            splitArea: { areaStyle: { color: ['#f8fafc', '#fff'] } },
+            axisLine: { lineStyle: { color: '#e2e8f0' } },
+            splitLine: { lineStyle: { color: '#e2e8f0' } }
+        },
+        series: [{
+            type: 'radar',
+            data: comparePoints.map(cp => ({
+                name: cp.label,
+                value: topFeatures.map(f => {
+                    const v = Math.abs(cp.pointData.coefs ? (cp.pointData.coefs[f.name] || 0) : 0);
+                    return +(v / (f.absMax + 1e-9) * 100).toFixed(1);
+                }),
+                lineStyle: { color: cp.color, width: 1.5 },
+                itemStyle: { color: cp.color },
+                areaStyle: { color: cp.color, opacity: 0.12 }
+            }))
+        }]
+    });
+
+    renderCmpDataTable();
+}
+
+// ── 对比数据表格 ──────────────────────────────────────────
+
+function renderCmpDataTable() {
+    const card = document.getElementById('cmp-data-table-card');
+    if (comparePoints.length < 2) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const pts = comparePoints;
+    const rows = [];
+
+    rows.push({ sec: '预测价格（元/㎡）' });
+    [['MLR','mlr'],['Lasso','lasso'],['GWR','gwr']].forEach(([label, m]) => {
+        rows.push({ label, vals: pts.map(p => ({ v: Math.round(calcPointPrice(p.pointData, m)).toLocaleString(), cls: 'val-price' })) });
+    });
+
+    rows.push({ sec: '位置信息' });
+    rows.push({ label: '小区 ID', vals: pts.map(p => ({ v: `#${p.id}` })) });
+    rows.push({ label: 'GWR 截距', vals: pts.map(p => ({ v: Math.round(p.pointData.intercept || 0).toLocaleString(), cls: 'val-price' })) });
+    rows.push({ label: '光谷辐射度', vals: pts.map(p => ({ v: p.pointData.radiation != null ? (+p.pointData.radiation).toFixed(4) : '—' })) });
+    rows.push({ label: '纬度', vals: pts.map(p => ({ v: p.pointData.lat.toFixed(4) })) });
+    rows.push({ label: '经度', vals: pts.map(p => ({ v: p.pointData.lon.toFixed(4) })) });
+
+    const coefKeys = Object.keys(pts[0].pointData.coefs || {}).slice(0, 8);
+    if (coefKeys.length) {
+        rows.push({ sec: 'GWR 局部系数' });
+        coefKeys.forEach(k => {
+            rows.push({
+                label: k,
+                vals: pts.map(p => {
+                    const v = (p.pointData.coefs || {})[k];
+                    if (v == null) return { v: '—' };
+                    return { v: v.toFixed(4), cls: v >= 0 ? 'val-pos' : 'val-neg' };
+                })
+            });
+        });
+    }
+
+    let html = `<table class="cmp-data-tbl"><thead><tr>
+        <th style="width:160px;">指标</th>
+        ${pts.map(p => `<th class="pt-col" style="background:${p.color}18;border-top:3px solid ${p.color};">${p.label}</th>`).join('')}
+    </tr></thead><tbody>`;
+    rows.forEach(r => {
+        if (r.sec) {
+            html += `<tr class="sec-row"><td colspan="${pts.length + 1}">${r.sec}</td></tr>`;
+        } else {
+            html += `<tr><td>${r.label}</td>${r.vals.map(v => `<td class="pt-val ${v.cls || ''}">${v.v}</td>`).join('')}</tr>`;
+        }
+    });
+    html += '</tbody></table>';
+    document.getElementById('cmp-data-table-wrap').innerHTML = html;
+}
+
+// ── 数据查询页面 ──────────────────────────────────────────
+
+const QRY_DISTRICTS = ['武昌','江岸','江汉','洪山','硚口','青山','汉阳','江夏','沌口','东西湖','黄陂','蔡甸','汉南','新洲'];
+const QRY_DIST_RANGE = { '武昌':[14000,22000],'江岸':[12000,21000],'江汉':[11000,20000],'洪山':[11000,20000],'硚口':[9000,17000],'青山':[9000,16000],'汉阳':[8000,16000],'江夏':[6000,14000],'沌口':[6000,13000],'东西湖':[5500,13000],'黄陂':[4000,10000],'蔡甸':[4000,9000],'汉南':[3000,8000],'新洲':[3000,7000] };
+const QRY_DEVS = ['万科地产','保利发展','中海地产','华润置地','龙湖集团','招商蛇口','碧桂园','绿地集团','金地集团','武汉城建','东原地产','旭辉集团','融创中国','奥园地产'];
+const QRY_TYPES = ['一室一厅','两室一厅','两室两厅','三室一厅','三室两厅','四室两厅'];
+const QRY_PFX = ['翡翠','金色','碧水','阳光','绿城','华景','盛世','锦绣','万象','天合','东湖','南湖','水岸','花样','龙湾','御景','丽都','城央','融创','光谷'];
+const QRY_SFX = ['城','园','苑','花园','家园','庭院','府','湾','新城','花苑','名居','尚院','豪庭','国际城','世家','雅居'];
+
+const HOUSING_DATA = (() => {
+    let s = 20240427;
+    const rand = () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+    return Array.from({ length: 280 }, (_, i) => {
+        const dist = QRY_DISTRICTS[Math.floor(rand() * QRY_DISTRICTS.length)];
+        const [lo, hi] = QRY_DIST_RANGE[dist];
+        return {
+            id: i + 1,
+            name: QRY_PFX[Math.floor(rand() * QRY_PFX.length)] + QRY_SFX[Math.floor(rand() * QRY_SFX.length)],
+            district: dist,
+            developer: QRY_DEVS[Math.floor(rand() * QRY_DEVS.length)],
+            price: Math.round((lo + rand() * (hi - lo)) / 100) * 100,
+            year: 1994 + Math.round(rand() * 29),
+            type: QRY_TYPES[Math.floor(rand() * QRY_TYPES.length)],
+            far: +(1.0 + rand() * 4.5).toFixed(1),
+            green: Math.round(20 + rand() * 35),
+            fee: +(0.5 + rand() * 5.5).toFixed(1),
+            schools: Math.round(rand() * 28),
+            medical: Math.round(rand() * 20)
+        };
+    });
+})();
+
+let qryFiltered = [...HOUSING_DATA];
+let qrySortField = 'price';
+let qrySortAsc = false;
+let qryPage = 1;
+const QRY_PAGE_SIZE = 15;
+
+function initQueryPage() {
+    const distSel = document.getElementById('flt-district');
+    QRY_DISTRICTS.forEach(d => distSel.append(Object.assign(document.createElement('option'), { value: d, textContent: d })));
+
+    const devSel = document.getElementById('flt-developer');
+    [...QRY_DEVS].sort().forEach(d => devSel.append(Object.assign(document.createElement('option'), { value: d, textContent: d })));
+
+    const yMin = document.getElementById('flt-year-min');
+    const yMax = document.getElementById('flt-year-max');
+    for (let y = 1994; y <= 2023; y++) {
+        yMin.append(Object.assign(document.createElement('option'), { value: y, textContent: y }));
+        yMax.append(Object.assign(document.createElement('option'), { value: y, textContent: y }));
+    }
+    applyFilters();
+}
+
+function applyFilters() {
+    const name  = document.getElementById('flt-name').value.trim();
+    const dist  = document.getElementById('flt-district').value;
+    const dev   = document.getElementById('flt-developer').value;
+    const type  = document.getElementById('flt-type').value;
+    const yMin  = parseInt(document.getElementById('flt-year-min').value) || 0;
+    const yMax  = parseInt(document.getElementById('flt-year-max').value) || 9999;
+    const pMin  = parseFloat(document.getElementById('flt-price-min').value) || 0;
+    const pMax  = parseFloat(document.getElementById('flt-price-max').value) || Infinity;
+    const farMin   = parseFloat(document.getElementById('flt-far-min').value)     || 0;
+    const farMax   = parseFloat(document.getElementById('flt-far-max').value)     || Infinity;
+    const greenMin = parseFloat(document.getElementById('flt-green-min').value)   || 0;
+    const greenMax = parseFloat(document.getElementById('flt-green-max').value)   || Infinity;
+    const feeMin   = parseFloat(document.getElementById('flt-fee-min').value)     || 0;
+    const feeMax   = parseFloat(document.getElementById('flt-fee-max').value)     || Infinity;
+    const schMin   = parseInt(document.getElementById('flt-schools-min').value)   || 0;
+    const schMax   = parseInt(document.getElementById('flt-schools-max').value)   || Infinity;
+    const medMin   = parseInt(document.getElementById('flt-medical-min').value)   || 0;
+    const medMax   = parseInt(document.getElementById('flt-medical-max').value)   || Infinity;
+
+    qryFiltered = HOUSING_DATA.filter(r =>
+        (!name || r.name.includes(name)) &&
+        (!dist || r.district === dist) &&
+        (!dev  || r.developer === dev) &&
+        (!type || r.type === type) &&
+        r.year   >= yMin   && r.year   <= yMax   &&
+        r.price  >= pMin   && r.price  <= pMax   &&
+        r.far    >= farMin && r.far    <= farMax  &&
+        r.green  >= greenMin && r.green  <= greenMax &&
+        r.fee    >= feeMin && r.fee    <= feeMax  &&
+        r.schools >= schMin && r.schools <= schMax &&
+        r.medical >= medMin && r.medical <= medMax
+    );
+    qryPage = 1;
+    renderQueryTable();
+}
+
+function resetFilters() {
+    ['flt-district','flt-developer','flt-type','flt-year-min','flt-year-max'].forEach(id => document.getElementById(id).value = '');
+    ['flt-name','flt-price-min','flt-price-max',
+     'flt-far-min','flt-far-max','flt-green-min','flt-green-max',
+     'flt-fee-min','flt-fee-max','flt-schools-min','flt-schools-max',
+     'flt-medical-min','flt-medical-max'].forEach(id => document.getElementById(id).value = '');
+    applyFilters();
+}
+
+function sortQuery(field) {
+    qrySortAsc = (qrySortField === field) ? !qrySortAsc : ['name','district','developer','type'].includes(field);
+    qrySortField = field;
+    qryPage = 1;
+    renderQueryTable();
+}
+
+function renderQueryTable() {
+    const sorted = [...qryFiltered].sort((a, b) => {
+        const av = a[qrySortField], bv = b[qrySortField];
+        const cmp = typeof av === 'string' ? av.localeCompare(bv, 'zh') : av - bv;
+        return qrySortAsc ? cmp : -cmp;
+    });
+
+    document.getElementById('qry-count-num').textContent = qryFiltered.length;
+
+    document.querySelectorAll('.qry-table th[data-field]').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        if (th.dataset.field === qrySortField) th.classList.add(qrySortAsc ? 'sort-asc' : 'sort-desc');
+    });
+
+    const totalPages = Math.max(1, Math.ceil(sorted.length / QRY_PAGE_SIZE));
+    const rows = sorted.slice((qryPage - 1) * QRY_PAGE_SIZE, qryPage * QRY_PAGE_SIZE);
+
+    const tbody = document.getElementById('qry-tbody');
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="qry-no-result">未找到符合条件的房屋数据，请调整筛选条件</td></tr>`;
+    } else {
+        tbody.innerHTML = rows.map(r => {
+            const pc = r.price >= 14000 ? 'qry-price-high' : r.price >= 8000 ? 'qry-price-mid' : 'qry-price-low';
+            return `<tr>
+                <td>${r.name}</td>
+                <td><span class="qry-tag qry-tag-blue">${r.district}</span></td>
+                <td>${r.developer}</td>
+                <td class="${pc}">${r.price.toLocaleString()}</td>
+                <td>${r.year}</td>
+                <td><span class="qry-tag qry-tag-green">${r.type}</span></td>
+                <td>${r.far}</td>
+                <td>${r.green}%</td>
+                <td>${r.fee} 元/㎡·月</td>
+                <td>${r.schools}</td>
+                <td>${r.medical}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // Pagination
+    const pg = document.getElementById('qry-pagination');
+    if (totalPages <= 1) { pg.innerHTML = ''; return; }
+    const lo = Math.max(1, qryPage - 2), hi = Math.min(totalPages, qryPage + 2);
+    let h = `<button class="pg-btn" onclick="qryGoPage(${qryPage-1})" ${qryPage<=1?'disabled':''}>‹ 上一页</button>`;
+    if (lo > 1) h += `<button class="pg-btn" onclick="qryGoPage(1)">1</button>${lo>2?'<span style="color:#94a3b8;padding:0 4px">…</span>':''}`;
+    for (let p = lo; p <= hi; p++) h += `<button class="pg-btn ${p===qryPage?'pg-active':''}" onclick="qryGoPage(${p})">${p}</button>`;
+    if (hi < totalPages) h += `${hi<totalPages-1?'<span style="color:#94a3b8;padding:0 4px">…</span>':''}<button class="pg-btn" onclick="qryGoPage(${totalPages})">${totalPages}</button>`;
+    h += `<button class="pg-btn" onclick="qryGoPage(${qryPage+1})" ${qryPage>=totalPages?'disabled':''}>下一页 ›</button>`;
+    pg.innerHTML = h;
+}
+
+function qryGoPage(p) {
+    qryPage = Math.max(1, Math.min(p, Math.ceil(qryFiltered.length / QRY_PAGE_SIZE)));
+    renderQueryTable();
+}
 </script>
 </body>
 </html>
