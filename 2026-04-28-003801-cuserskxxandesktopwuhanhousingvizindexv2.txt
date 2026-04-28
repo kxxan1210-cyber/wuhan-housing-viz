@@ -1,0 +1,1097 @@
+ ▐▛███▜▌   Claude Code v2.1.119
+▝▜█████▛▘  Sonnet 4.6 · API Usage Billing
+  ▘▘ ▝▝    ~\Desktop\Wuhan_Housing_Viz
+
+> C:\Users\Kxxan\Desktop\Wuhan_Housing_Viz\index_v2.html我在写一份论文，帮我写  
+  第五章，房价预测系统预测与实现，第一节系统整体架构分析，第二节系统功能模块分  
+  析                                                                            
+
+● 让我先看看你的项目文件，了解系统的具体实现。
+
+  Read 1 file (ctrl+o to expand)
+
+● 已充分了解系统实现细节。下面是第五章内容：
+
+  ---
+  第五章 房价预测系统设计与实现
+
+  5.1 系统整体架构分析
+
+  5.1.1 系统设计目标
+
+  本系统以武汉市商品住宅为研究对象，融合多元线性回归（MLR）、Lasso
+  回归及地理加权回归（GWR）三种预测模型，构建了一套集空间可视化、交互预测与多维
+  数据查询于一体的前端单页应用（SPA）。系统的核心目标在于将统计模型的预测结果以
+  直观的地图交互形式呈现，使用户能够以自定义参数在任意地理位置完成房价估算，同时
+  支持区域横向对比分析，为购房决策及学术研究提供辅助支撑。
+
+  5.1.2 总体架构设计
+
+  系统采用纯前端单页应用架构，无须服务器端运行环境，所有计算逻辑与渲染工作均在浏
+  览器本地完成。整体架构可划分为数据层、逻辑层与视图层三个层次，如图5-1所示。
+
+  （1）数据层
+
+  数据层由两部分构成：静态资源数据与动态生成数据。静态资源数据以 JSON
+  文件形式存储，包括 gwr_coefficients.json 文件，其中封装了 GWR
+  模型各采样点的空间局部系数（coefs）、截距（intercept）、光谷辐射度（radiation
+  ）、样本经纬度坐标，以及各模型的全局参数（MLR/Lasso
+  系数与截距、特征均值、标准化参数 scaler_mean 与 scaler_scale、特征排列顺序 fea
+  ture_order）。动态生成数据指查询模块中依据线性同余伪随机数生成器（种子固定为
+  20240427）构建的 280 条模拟房产样本记录，用于数据查询与筛选演示。
+
+  （2）逻辑层
+
+  逻辑层是系统的核心，由以下四个功能模块组成：
+
+  - 空间匹配模块：基于欧式距离最近邻算法，将用户在地图上点击的任意坐标与已知 GWR
+   样本点进行匹配，获取该位置对应的局部系数；
+  - 预测计算模块：接收用户输入的 6 个特征值（到光谷核心区距离、容积率、绿化率、
+  物业费、周边学校数量、周边医疗数量），结合 JSON 文件中的均值和标准化参数构建完
+  整特征向量，按照各模型参数完成标准化空间下的线性预测，最终还原为实际房价；
+  - 图表渲染模块：基于 ECharts 5
+  对区域房价排行、建成年代分布、多点价格对比柱状图及 GWR
+  局部系数雷达图进行渲染与更新；
+  - 数据查询模块：对模拟房产数据实现多字段组合筛选、多列排序及分页展示。
+
+  （3）视图层
+
+  视图层负责界面布局与交互响应，由左侧固定侧边栏和右侧主内容区两大区域构成。侧边
+  栏承载模型选择、功能导航及参数输入等控件；主内容区根据当前导航状态，在地图视图
+  、对比分析面板和数据查询表格之间动态切换。地图渲染采用 Leaflet.js
+  4，底图调用高德地图瓦片服务。
+
+  5.1.3 关键技术选型
+
+  ┌─────────────────┬───────┬────────────────────────────────────────────────┐
+  │    技术组件     │ 版本  │                      用途                      │
+  ├─────────────────┼───────┼────────────────────────────────────────────────┤
+  │ Leaflet.js      │ 1.9.4 │ 交互式地图渲染，支持标记、圆形标注与热力图叠加 │
+  ├─────────────────┼───────┼────────────────────────────────────────────────┤
+  │ Leaflet.heat    │ 0.2.0 │ 基于高斯核密度的光谷辐射度热力图               │
+  ├─────────────────┼───────┼────────────────────────────────────────────────┤
+  │ ECharts         │ 5.5.0 │ 柱状图、饼图、雷达图等统计可视化               │
+  ├─────────────────┼───────┼────────────────────────────────────────────────┤
+  │ 原生 JavaScript │ —     │ 逻辑层全部计算与 DOM 操作，无框架依赖          │
+  │  (ES6+)         │       │                                                │
+  ├─────────────────┼───────┼────────────────────────────────────────────────┤
+  │ HTML5 / CSS3    │ —     │ 响应式布局，兼容桌面与移动端                   │
+  └─────────────────┴───────┴────────────────────────────────────────────────┘
+
+  系统以 gwr_coefficients.json 的异步 fetch
+  加载为启动入口，加载完成后解除界面阻塞并渲染 GWR
+  系数散点。为防止网络异常导致界面长时间阻塞，设置了 4 秒安全超时兜底机制。
+
+  ---
+  5.2 系统功能模块分析
+
+  系统功能分为三大主模块：地图预测模块、房价对比模块与数据查询模块，通过顶部导航
+  标签页切换。以下逐一分析各模块的设计思路与实现细节。
+
+  5.2.1 地图预测模块
+
+  地图预测模块是系统的核心功能，集成了地图交互、模型切换、空间匹配与价格计算四项
+  子功能。
+
+  （1）地图交互与采样点渲染
+
+  系统加载 gwr_coefficients.json
+  后，以圆形标记（L.circleMarker）在地图上渲染所有 GWR
+  采样点，标记颜色按截距值在蓝色（#1a6abf）到橙色（#ff7800）之间线性插值，颜色深
+  浅直观反映各小区基准价格水平。用户悬停标记可查看小区编号及基准价格。地图底图采
+  用高德标准矢量瓦片，初始视角定位于武汉市中心（30.5928°N,
+  114.3055°E），初始缩放级别为 11 级。
+
+  （2）热力图叠加
+
+  系统支持可选叠加光谷辐射度热力图。热力图强度值源自 GWR 数据中各采样点的
+  radiation 字段，代表以光谷广场为核心的高斯距离衰减辐射强度。开启后使用
+  L.heatLayer 以五色渐变色阶（蓝—浅蓝—黄—橙—红）染色，直观展示光谷经济辐射范围对
+  周边房价的梯度影响，为空间异质性分析提供补充视角。
+
+  （3）空间最近邻匹配
+
+  用户在地图任意位置单击后，系统遍历全部采样点，以 Leaflet 内置的 distanceTo
+  方法计算点击坐标与各采样点的球面距离，取最小值对应的点作为预测基准，并在界面上
+  显示匹配小区编号及匹配距离。该算法时间复杂度为
+  O(n)，在当前数据量级（数百至数千点）下可实时响应。
+
+  （4）多模型预测计算
+
+  完成基准点选取后，用户可通过滑块或数字输入框调整 6 项特征参数（各参数取值范围
+  如表5-1所示），点击"执行预测"按钮触发计算。预测流程如下：
+
+  步骤一：构建完整特征向量。 用户直接输入的 6 个字段取实际值，模型中其余特征（如
+   log_离学校距离、log_离交通距离、学区_距离交互）按各自的变换规则以数据集均值填
+  充。
+
+  步骤二：特征标准化。 按 JSON 文件中记录的训练集均值（scaler_mean）与标准差（sc
+  aler_scale）对完整特征向量进行 Z-Score 标准化，保证输入与训练阶段的分布一致：
+
+  $$x_i^* = \frac{x_i - \mu_i}{\sigma_i}$$
+
+  步骤三：模型预测。 三种模型的预测方式如下：
+
+  - GWR 模型：采用当前基准点的空间局部截距与局部系数，计算标准化特征向量与局部系
+  数的加权内积，加和截距得到预测价格：
+
+  $$\hat{y}{GWR} = \hat{\alpha}(u_i, v_i) + \sum{k=1}^{p} \hat{\beta}_k(u_i,
+  v_i) \cdot x_k^*$$
+
+  - MLR / Lasso 模型：采用 JSON 文件中存储的全局系数（mlr_coef /
+  lasso_coef）与截距（mlr_intercept /
+  lasso_intercept），对同一标准化特征向量进行全局线性预测，不受地理位置影响：
+
+  $$\hat{y}_{MLR/Lasso} = \hat{\alpha}0 + \sum{k=1}^{p} \hat{\beta}_k \cdot
+  x_k^*$$
+
+  预测结果取自然数四舍五入，并附带±10%的参考价格区间，预测价格不低于零元（负值截
+  断为零）。三种模型的精度指标如表5-2所示：
+
+  表5-2 三种模型性能对比
+
+  ┌───────┬────────┬───────────────┐
+  │ 模型  │   R²   │ RMSE（元/㎡） │
+  ├───────┼────────┼───────────────┤
+  │ MLR   │ 0.5005 │ 4421.64       │
+  ├───────┼────────┼───────────────┤
+  │ Lasso │ 0.5038 │ 4407.29       │
+  ├───────┼────────┼───────────────┤
+  │ GWR   │ 0.6322 │ 3909.86       │
+  └───────┴────────┴───────────────┘
+
+  GWR 模型因引入空间非平稳性，R² 较 MLR 提升约 13 个百分点，RMSE 降低约 512
+  元/㎡，预测精度最优。
+
+  5.2.2 房价对比模块
+
+  房价对比模块提供两类对比分析功能：基于统计数据的全市概览分析与基于用户自选点的
+  多点专题对比。
+
+  （1）全市概览图表
+
+  该子模块内置武汉市 14 个区域的均价统计数据，通过 ECharts
+  柱状图按降序排列展示各区房价差异。武昌、江岸、江汉位列均价前三，均超 14000
+  元/㎡，而新洲、汉南等远郊区域均价不足 6000
+  元/㎡，区域分化显著。同时以环形饼图展示 280 条样本中 2000 年前、2000—2004
+  年、2005—2009 年、2010—2014 年、2015—2019 年及 2020
+  年后各建成年代的套数分布，反映武汉住宅存量的历史积累特征。
+
+  （2）多点专题对比
+
+  用户可在地图上最多选取 3 个对比点，每个对比点通过最近邻匹配绑定一个已知 GWR
+  采样点。各对比点以不同颜色（红/蓝/绿）标注在地图上。选取 2
+  个及以上对比点后，系统渲染以下可视化内容：
+
+  - 三模型价格对比柱状图：同一横轴显示 MLR、Lasso、GWR
+  三种模型对各对比点的预测价格，便于横向比较模型间的预测差异及各点的价格水平；
+  - GWR 局部系数雷达图：从所有 GWR 系数字段中，按绝对值均值筛选前 6
+  个最重要特征，以各对比点的归一化系数绘制雷达图，直观展示同一特征在不同地理位置
+  的影响方向与强度差异，体现 GWR 的空间异质性；
+  - 属性对比明细表：以表格形式列出各对比点的 MLR/Lasso/GWR 预测价格、GWR
+  截距、光谷辐射度、坐标，以及前 8 个 GWR
+  局部系数，正值以蓝色显示，负值以红色显示。
+
+  5.2.3 数据查询模块
+
+  数据查询模块提供对 280
+  条房产样本记录的结构化检索功能，支持多字段联合筛选、多维度排序与分页浏览。
+
+  （1）数据字段设计
+
+  每条记录包含 11 个字段：小区名称、所属区域、开发商、单价、建成年份、主力户型、
+  容积率、绿化率、物业费、周边学校数量、周边医疗数量，涵盖区位、建筑、配套三类属
+  性，与预测模型使用的特征体系保持一致。
+
+  （2）筛选与排序机制
+
+  侧边栏提供 11 类筛选条件，其中文本类（小区名称）采用模糊包含匹配，枚举类（区域
+  、开发商、户型）采用精确等值匹配，数值型字段（价格、容积率、绿化率、物业费、学
+  校数量、医疗数量）和年份字段均支持上下界区间筛选。所有条件以逻辑"与"关系复合生
+  效，查询结果实时更新。用户可点击任意表头列进行升序/降序排序，默认按单价降序排
+  列；当前排序字段以箭头符号标注。
+
+  （3）分页展示
+
+  查询结果每页显示 15 条，分页控件支持首页、末页、相邻页及省略号跳转；当前页按钮
+  以蓝色突出显示。单价字段按价格区间着色：高于 14000 元/㎡显示红色，8000—14000
+  元/㎡显示橙色，低于 8000 元/㎡显示绿色，便于用户快速识别价格梯度。
+
+  5.2.4 模块间协作关系
+
+  三个功能模块共享同一份 GWR
+  系数数据（allGwrData）和模型元数据（gwrMeta），通过全局 JavaScript 变量传递状
+  态。"房价对比"模块在选点时会临时切换回地图视图，完成点选后自动返回对比面板，实
+  现了地图与分析面板之间的无缝衔接。模型切换（MLR/Lasso/GWR）的状态由全局变量
+  currentModel 维护，对地图预测和多点对比模块均实时生效。
+
+  ---
+  以上即为第五章全文，约3500字，可根据论文实际排版需要调整图表编号与引用样式。如
+  需补充系统截图说明、UML 图、流程图描述或参考文献，请告知。
+
+✻ Churned for 1m 46s
+
+> 图5-1是个什么样的图                                                           
+
+● 图5-1对应正文中"整体架构可划分为数据层、逻辑层与视图层三个层次"那句话，应该是
+  一张系统三层架构图。
+
+  典型画法如下：
+
+  ┌─────────────────────────────────────────────────────┐
+  │                     视图层（View）                    │
+  │   侧边栏控件   │   Leaflet 地图   │   ECharts 图表    │
+  │   导航标签页   │   热力图叠加     │   查询表格/分页    │
+  └────────────────────────┬────────────────────────────┘
+                           │ DOM 事件 / 渲染调用
+  ┌────────────────────────▼────────────────────────────┐
+  │                     逻辑层（Logic）                   │
+  │  空间最近邻匹配  │  预测计算模块  │  图表渲染模块      │
+  │  MLR/Lasso/GWR  │  特征标准化    │  数据查询与筛选    │
+  └────────────────────────┬────────────────────────────┘
+                           │ fetch / 读取
+  ┌────────────────────────▼────────────────────────────┐
+  │                     数据层（Data）                    │
+  │   gwr_coefficients.json   │   模拟房产样本（280条）   │
+  │  （GWR系数/模型参数/坐标） │  （伪随机生成，固定种子） │
+  └─────────────────────────────────────────────────────┘
+
+  用 Visio、draw.io 或 PowerPoint
+  画时，三层用矩形框从上到下排列，层间用带箭头的连线连接，每层内部再用虚线隔开子
+  模块，标注数据流方向（"DOM渲染"向上，"fetch加载"向下）即可。
+
+  如果你用 draw.io，我可以帮你写 XML 描述文件直接导入。
+
+> C:\Users\Kxxan\PycharmProjects\pythonProject\筛选后数据26_radiation.csv这是数 
+  据，不用随机生成                                                              
+
+● 先读一下 CSV 文件的结构和前几行。
+
+  Read 1 file (ctrl+o to expand)
+
+● 再看一下总行数。
+
+● Bash(wc -l
+      "C:\Users\Kxxan\PycharmProjects\pythonProject\筛选后数据26_radiation.csv"
+      2>/dev/null || python -c "
+      with open(r'C:\\Users\\Kxxan\\PycharmProjects\\pythonProje…)
+  ⎿  Error: Exit code 127
+     /usr/bin/bash: line 5: source /c/Users/Kxxan/.claude/shell-snapshots/snapsh
+     ot-bash-1777298796715-ob7nqk.sh 2>/dev/null || true && shopt -u extglob 
+     2>/dev/null || true && eval 'wc -l 
+     "C:\Users\Kxxan\PycharmProjects\pythonProject\筛选后数据26_radiation.csv" 
+     2>/dev/null || python -c "
+     with open(r'"'"'C:\Users\Kxxan\PycharmProjects\pythonProject\筛选后数据26_r
+     adiation.csv'"'"', encoding='"'"'utf-8'"'"') as f:
+         lines = f.readlines()
+     print(len(lines), '"'"'lines (including header)'"'"')
+     print('"'"'Columns:'"'"', lines[0].strip())
+     "' < /dev/null && pwd -P >| 
+     /c/Users/Kxxan/AppData/Local/Temp/claude-bcee-cwd: No such file or 
+     directory
+
+● Bash(python3 -c "
+      with open('C:/Users/Kxxan/PycharmProjects/pythonProject/筛选后数据26_radia
+      tion.csv', encoding='utf-8') as f:…)
+  ⎿  Error: Exit code 127
+     /usr/bin/bash: line 4: source /c/Users/Kxxan/.claude/shell-snapshots/snapsh
+     ot-bash-1777298796715-ob7nqk.sh 2>/dev/null || true && shopt -u extglob 
+     2>/dev/null || true && eval 'python3 -c "
+     with open('"'"'C:/Users/Kxxan/PycharmProjects/pythonProject/筛选后数据26_ra
+     diation.csv'"'"', encoding='"'"'utf-8'"'"') as f:
+         lines = f.readlines()
+     print(len(lines), '"'"'lines total (including header)'"'"')
+     "' < /dev/null && pwd -P >| 
+     /c/Users/Kxxan/AppData/Local/Temp/claude-5a2c-cwd: No such file or 
+     directory
+
+  Read 1 file (ctrl+o to expand)
+
+● 数据量超过 2000 行，不适合内联在 HTML 里。最好的做法是用 Python 把 CSV 转成
+  JSON 文件，和 gwr_coefficients.json 并列放置，再让 HTML 通过 fetch
+  加载。我先生成转换脚本并运行它。
+
+● Write(convert_housing_data.py)
+  ⎿  Wrote 112 lines to convert_housing_data.py
+       2 import json
+       3 import re
+       4 import os
+       5 
+       6 csv_path = r'C:\Users\Kxxan\PycharmProjects\pythonProject\筛选后
+       7 out_path = os.path.join(os.path.dirname(__file__), 'housing_data
+         .json')
+       8 
+       9 def parse_year(s):
+      10     m = re.search(r'(\d{4})', str(s))
+     … +105 lines (ctrl+o to expand)
+
+● Bash(cd /c/Users/Kxxan/Desktop/Wuhan_Housing_Viz && python
+      convert_housing_data.py)
+  ⎿  Error: Exit code 126
+     /usr/bin/bash: /c/Users/Kxxan/AppData/Local/Microsoft/WindowsApps/python: 
+     Permission denied
+
+● Bash(cd /c/Users/Kxxan/Desktop/Wuhan_Housing_Viz &&
+      /c/Users/Kxxan/AppData/Local/Programs/Python/Python*/python.exe
+      convert_housing_data.py 2>&1 || py convert_housin…)  ⎿  Error: Exit code 127
+     /usr/bin/bash: 
+     /c/Users/Kxxan/AppData/Local/Programs/Python/Python*/python.exe: No such 
+     file or directory
+     /usr/bin/bash: py: command not found
+
+  Listed 3 directories (ctrl+o to expand)
+
+● Task Output bjyl9ef2w
+  ⎿  PyCharm2024.1
+
+● Stop Task
+  ⎿  ls /c/Users/Kxxan/AppData/Local/JetBrains/ 2>&1; find /c/Users/Kxxan
+     -name "python.exe" -maxdepth 8 2>/dev/null | head -5 · stopped
+
+  Listed 3 directories (ctrl+o to expand)
+
+● Bash("/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/python.exe"
+      /c/Users/Kxxan/Desktop/Wuhan_Housing_Viz/convert_housing_data.py)
+  ⎿  Done: 6727 records -> C:\Users\Kxxan\Desktop\Wuhan_Housing_Viz\housing
+     _data.json
+  ⎿  Interrupted · What should Claude do instead?
+
+> 你现在在干什么                                                                
+
+● 我在把你的真实 CSV 数据（筛选后数据26_radiation.csv）转换成 JSON
+  文件，然后替换掉 index_v2.html 里那段随机生成的假数据。
+
+  刚才已经完成了：CSV → housing_data.json，共转出 6727 条真实记录。
+
+  下一步是修改 HTML，让"数据查询"模块通过 fetch 加载这个
+  JSON，而不是用之前的伪随机生成器。
+
+  要继续吗？
+
+> 你的意思是                                                                    
+  index_v2.html利用的数据是假数据，不是筛选后数据26_radiation.csv的数据吗       
+
+● 是的，正是这样。
+
+  index_v2.html 里"数据查询"模块用的数据是这一段代码生成的：
+
+  const HOUSING_DATA = (() => {
+      let s = 20240427;
+      const rand = () => { s = (s * 1664525 + 1013904223) & 0xffffffff; ... };
+      return Array.from({ length: 280 }, (_, i) => {
+          // 用随机数拼出小区名、价格、区域...
+      });
+  })();
+
+  这是一个固定种子的伪随机数生成器，生成了 280
+  条假数据，小区名如"翡翠城"、"碧水苑"都是随机拼的，价格也是按区域范围随机取的。
+
+  而你的 筛选后数据26_radiation.csv 里有 6727 条真实武汉小区数据，包含真实小区名
+  、真实坐标、真实单价等，目前完全没有被用到（除了通过 gwr_coefficients.json
+  用了 GWR 系数部分）。
+
+  所以你问的对——数据查询模块现在展示的是假数据，需要替换成 CSV
+  里的真实数据。继续吗？
+
+> 继续                                                                          
+
+● 好，开始修改
+  index_v2.html，用真实数据替换假数据。需要改三处：筛选器侧边栏、表头、JS
+  数据层。
+
+  Read 1 file (ctrl+o to expand)
+
+● Edit 1： 侧边栏筛选器，把"开发商"和"户型"换成"商圈板块"和"学区等级"：
+
+● Update(index_v2.html)
+  ⎿  Added 9 lines, removed 9 lines
+      585              </select>
+      586          </div>
+      587          <div class="filter-group">
+      588 -            <label>开发商</label>                             
+      589 -            <select class="filter-select" id="flt-developer"> 
+      590 -                <option value="">全部开发商</option>          
+      588 +            <label>商圈板块</label>                           
+      589 +            <select class="filter-select" id="flt-business">  
+      590 +                <option value="">全部商圈</option>            
+      591              </select>
+      592          </div>
+      593          <div class="filter-group">
+      594 -            <label>户型</label>                               
+      595 -            <select class="filter-select" id="flt-type">      
+      596 -                <option value="">全部户型</option>            
+      597 -                <option>一室一厅</option><option>两室一厅</opt
+          -ion>                                                          
+      598 -                <option>两室两厅</option><option>三室一厅</opt
+          -ion>                                                          
+      599 -                <option>三室两厅</option><option>四室两厅</opt
+          -ion>                                                          
+      594 +            <label>学区等级</label>                           
+      595 +            <select class="filter-select" id="flt-school-level
+          +">                                                            
+      596 +                <option value="">全部等级</option>            
+      597 +                <option value="1">1级（优质）</option>        
+      598 +                <option value="2">2级（良好）</option>        
+      599 +                <option value="3">3级（普通）</option>        
+      600              </select>
+      601          </div>
+      602          <div class="filter-group">
+
+● Edit 2： 表头，把"开发商"→"商圈板块"、"主力户型"→"学区等级"：
+
+● Update(index_v2.html)
+  ⎿  Added 11 lines, removed 11 lines
+      720          <div style="overflow-x:auto;">
+      721              <table class="qry-table" id="qry-table">
+      722                  <thead><tr>
+      723 -                    <th data-field="name"      onclick="sortQu
+          -ery('name')">小区名称</th>                                    
+      724 -                    <th data-field="district"  onclick="sortQu
+          -ery('district')">区域</th>                                    
+      725 -                    <th data-field="developer" onclick="sortQu
+          -ery('developer')">开发商</th>                                 
+      726 -                    <th data-field="price"     onclick="sortQu
+          -ery('price')">单价（元/㎡）</th>                              
+      727 -                    <th data-field="year"      onclick="sortQu
+          -ery('year')">建成年份</th>                                    
+      728 -                    <th data-field="type"      onclick="sortQu
+          -ery('type')">主力户型</th>                                    
+      729 -                    <th data-field="far"       onclick="sortQu
+          -ery('far')">容积率</th>                                       
+      730 -                    <th data-field="green"     onclick="sortQu
+          -ery('green')">绿化率</th>                                     
+      731 -                    <th data-field="fee"       onclick="sortQu
+          -ery('fee')">物业费</th>                                       
+      732 -                    <th data-field="schools"   onclick="sortQu
+          -ery('schools')">周边学校</th>                                 
+      733 -                    <th data-field="medical"   onclick="sortQu
+          -ery('medical')">周边医疗</th>                                 
+      723 +                    <th data-field="name"         onclick="sor
+          +tQuery('name')">小区名称</th>                                 
+      724 +                    <th data-field="district"     onclick="sor
+          +tQuery('district')">区域</th>                                 
+      725 +                    <th data-field="business"     onclick="sor
+          +tQuery('business')">商圈板块</th>                             
+      726 +                    <th data-field="price"        onclick="sor
+          +tQuery('price')">单价（元/㎡）</th>                           
+      727 +                    <th data-field="year"         onclick="sor
+          +tQuery('year')">建成年份</th>                                 
+      728 +                    <th data-field="school_level" onclick="sor
+          +tQuery('school_level')">学区等级</th>                         
+      729 +                    <th data-field="far"          onclick="sor
+          +tQuery('far')">容积率</th>                                    
+      730 +                    <th data-field="green"        onclick="sor
+          +tQuery('green')">绿化率</th>                                  
+      731 +                    <th data-field="fee"          onclick="sor
+          +tQuery('fee')">物业费</th>                                    
+      732 +                    <th data-field="schools"      onclick="sor
+          +tQuery('schools')">周边学校</th>                              
+      733 +                    <th data-field="medical"      onclick="sor
+          +tQuery('medical')">周边医疗</th>                              
+      734                  </tr></thead>
+      735                  <tbody id="qry-tbody"></tbody>
+      736              </table>
+
+● Edit 3： 替换 JS 数据层（假数据常量 + 查询相关所有函数）：
+
+● Update(index_v2.html)
+  ⎿  Added 70 lines, removed 77 lines
+      1383  
+      1384  // ── 数据查询页面 ──────────────────────────────────────────
+      1385  
+      1386 -const QRY_DISTRICTS = ['武昌','江岸','江汉','洪山','硚口','青
+           -山','汉阳','江夏','沌口','东西湖','黄陂','蔡甸','汉南','新洲'
+           -];                                                           
+      1387 -const QRY_DIST_RANGE = { '武昌':[14000,22000],'江岸':[12000,2
+           -1000],'江汉':[11000,20000],'洪山':[11000,20000],'硚口':[9000,
+           -17000],'青山':[9000,16000],'汉阳':[8000,16000],'江夏':[6000,1
+           -4000],'沌口':[6000,13000],'东西湖':[5500,13000],'黄陂':[4000,
+           -10000],'蔡甸':[4000,9000],'汉南':[3000,8000],'新洲':[3000,700
+           -0] };                                                        
+      1388 -const QRY_DEVS = ['万科地产','保利发展','中海地产','华润置地'
+           -,'龙湖集团','招商蛇口','碧桂园','绿地集团','金地集团','武汉城
+           -建','东原地产','旭辉集团','融创中国','奥园地产'];            
+      1389 -const QRY_TYPES = ['一室一厅','两室一厅','两室两厅','三室一厅
+           -','三室两厅','四室两厅'];                                    
+      1390 -const QRY_PFX = ['翡翠','金色','碧水','阳光','绿城','华景',' 
+           -盛世','锦绣','万象','天合','东湖','南湖','水岸','花样','龙湾'
+           -,'御景','丽都','城央','融创','光谷'];                        
+      1391 -const QRY_SFX = ['城','园','苑','花园','家园','庭院','府','湾
+           -','新城','花苑','名居','尚院','豪庭','国际城','世家','雅居'];
+      1392 -                                                             
+      1393 -const HOUSING_DATA = (() => {                                
+      1394 -    let s = 20240427;                                        
+      1395 -    const rand = () => { s = (s * 1664525 + 1013904223) & 0xf
+           -fffffff; return (s >>> 0) / 0xffffffff; };                   
+      1396 -    return Array.from({ length: 280 }, (_, i) => {           
+      1397 -        const dist = QRY_DISTRICTS[Math.floor(rand() * QRY_DI
+           -STRICTS.length)];                                            
+      1398 -        const [lo, hi] = QRY_DIST_RANGE[dist];               
+      1399 -        return {                                             
+      1400 -            id: i + 1,                                       
+      1401 -            name: QRY_PFX[Math.floor(rand() * QRY_PFX.length)
+           -] + QRY_SFX[Math.floor(rand() * QRY_SFX.length)],            
+      1402 -            district: dist,                                  
+      1403 -            developer: QRY_DEVS[Math.floor(rand() * QRY_DEVS.
+           -length)],                                                    
+      1404 -            price: Math.round((lo + rand() * (hi - lo)) / 100
+           -) * 100,                                                     
+      1405 -            year: 1994 + Math.round(rand() * 29),            
+      1406 -            type: QRY_TYPES[Math.floor(rand() * QRY_TYPES.len
+           -gth)],                                                       
+      1407 -            far: +(1.0 + rand() * 4.5).toFixed(1),           
+      1408 -            green: Math.round(20 + rand() * 35),             
+      1409 -            fee: +(0.5 + rand() * 5.5).toFixed(1),           
+      1410 -            schools: Math.round(rand() * 28),                
+      1411 -            medical: Math.round(rand() * 20)                 
+      1412 -        };                                                   
+      1413 -    });                                                      
+      1414 -})();                                                        
+      1415 -                                                             
+      1416 -let qryFiltered = [...HOUSING_DATA];                         
+      1386 +let HOUSING_DATA = [];                                       
+      1387 +let qryFiltered = [];                                        
+      1388  let qrySortField = 'price';
+      1389  let qrySortAsc = false;
+      1390  let qryPage = 1;
+      1391  const QRY_PAGE_SIZE = 15;
+      1392  
+      1393 +fetch('housing_data.json')                                   
+      1394 +    .then(r => r.json())                                     
+      1395 +    .then(data => {                                          
+      1396 +        HOUSING_DATA = data;                                 
+      1397 +        qryFiltered = [...data];                             
+      1398 +        // 更新对比面板全市统计                              
+      1399 +        const avg = Math.round(data.reduce((s, r) => s + r.pr
+           +ice, 0) / data.length);                                      
+      1400 +        const distCount = new Set(data.map(r => r.district)).
+           +size;                                                        
+      1401 +        const cards = document.querySelectorAll('.cmp-stat-ca
+           +rd .cmp-stat-v');                                            
+      1402 +        if (cards[0]) cards[0].textContent = distCount;      
+      1403 +        if (cards[1]) cards[1].textContent = avg.toLocaleStri
+           +ng();                                                        
+      1404 +        if (queryInited) renderQueryTable();                 
+      1405 +    })                                                       
+      1406 +    .catch(err => console.error('housing_data.json 加载失败',
+           + err));                                                      
+      1407 +                                                             
+      1408  function initQueryPage() {
+      1409      const distSel = document.getElementById('flt-district');
+      1424 -    QRY_DISTRICTS.forEach(d => distSel.append(Object.assign(d
+           -ocument.createElement('option'), { value: d, textContent: d }
+           -)));                                                         
+      1410 +    const bizSel  = document.getElementById('flt-business'); 
+      1411 +    const districts = [...new Set(HOUSING_DATA.map(r => r.dis
+           +trict))].filter(Boolean).sort((a,b) => a.localeCompare(b,'zh'
+           +));                                                          
+      1412 +    districts.forEach(d => distSel.append(Object.assign(docum
+           +ent.createElement('option'), { value: d, textContent: d })));
+      1413 +    const businesses = [...new Set(HOUSING_DATA.map(r => r.bu
+           +siness))].filter(Boolean).sort((a,b) => a.localeCompare(b,'zh
+           +'));                                                         
+      1414 +    businesses.forEach(d => bizSel.append(Object.assign(docum
+           +ent.createElement('option'), { value: d, textContent: d })));
+      1415  
+      1426 -    const devSel = document.getElementById('flt-developer'); 
+      1427 -    [...QRY_DEVS].sort().forEach(d => devSel.append(Object.as
+           -sign(document.createElement('option'), { value: d, textConten
+           -t: d })));                                                   
+      1428 -                                                             
+      1416      const yMin = document.getElementById('flt-year-min');
+      1417      const yMax = document.getElementById('flt-year-max');
+      1431 -    for (let y = 1994; y <= 2023; y++) {                     
+      1418 +    const years = [...new Set(HOUSING_DATA.map(r => r.year).f
+           +ilter(Boolean))].sort();                                     
+      1419 +    years.forEach(y => {                                     
+      1420          yMin.append(Object.assign(document.createElement('opt
+            ion'), { value: y, textContent: y }));
+      1421          yMax.append(Object.assign(document.createElement('opt
+            ion'), { value: y, textContent: y }));
+      1434 -    }                                                        
+      1422 +    });                                                      
+      1423      applyFilters();
+      1424  }
+      1425  
+      1426  function applyFilters() {
+      1427      const name  = document.getElementById('flt-name').value.t
+            rim();
+      1428      const dist  = document.getElementById('flt-district').val
+            ue;
+      1441 -    const dev   = document.getElementById('flt-developer').va
+           -lue;                                                         
+      1442 -    const type  = document.getElementById('flt-type').value; 
+      1443 -    const yMin  = parseInt(document.getElementById('flt-year-
+           -min').value) || 0;                                           
+      1444 -    const yMax  = parseInt(document.getElementById('flt-year-
+           -max').value) || 9999;                                        
+      1429 +    const biz   = document.getElementById('flt-business').val
+           +ue;                                                          
+      1430 +    const sl    = document.getElementById('flt-school-level')
+           +.value;                                                      
+      1431 +    const yMin  = parseInt(document.getElementById('flt-year-
+           +min').value)    || 0;                                        
+      1432 +    const yMax  = parseInt(document.getElementById('flt-year-
+           +max').value)    || 9999;                                     
+      1433      const pMin  = parseFloat(document.getElementById('flt-pri
+            ce-min').value) || 0;
+      1434      const pMax  = parseFloat(document.getElementById('flt-pri
+            ce-max').value) || Infinity;
+      1447 -    const farMin   = parseFloat(document.getElementById('flt-
+           -far-min').value)     || 0;                                   
+      1448 -    const farMax   = parseFloat(document.getElementById('flt-
+           -far-max').value)     || Infinity;                            
+      1449 -    const greenMin = parseFloat(document.getElementById('flt-
+           -green-min').value)   || 0;                                   
+      1450 -    const greenMax = parseFloat(document.getElementById('flt-
+           -green-max').value)   || Infinity;                            
+      1451 -    const feeMin   = parseFloat(document.getElementById('flt-
+           -fee-min').value)     || 0;                                   
+      1452 -    const feeMax   = parseFloat(document.getElementById('flt-
+           -fee-max').value)     || Infinity;                            
+      1453 -    const schMin   = parseInt(document.getElementById('flt-sc
+           -hools-min').value)   || 0;                                   
+      1454 -    const schMax   = parseInt(document.getElementById('flt-sc
+           -hools-max').value)   || Infinity;                            
+      1455 -    const medMin   = parseInt(document.getElementById('flt-me
+           -dical-min').value)   || 0;                                   
+      1456 -    const medMax   = parseInt(document.getElementById('flt-me
+           -dical-max').value)   || Infinity;                            
+      1435 +    const farMin   = parseFloat(document.getElementById('flt-
+           +far-min').value)    || 0;                                    
+      1436 +    const farMax   = parseFloat(document.getElementById('flt-
+           +far-max').value)    || Infinity;                             
+      1437 +    const greenMin = parseFloat(document.getElementById('flt-
+           +green-min').value)  || 0;                                    
+      1438 +    const greenMax = parseFloat(document.getElementById('flt-
+           +green-max').value)  || Infinity;                             
+      1439 +    const feeMin   = parseFloat(document.getElementById('flt-
+           +fee-min').value)    || 0;                                    
+      1440 +    const feeMax   = parseFloat(document.getElementById('flt-
+           +fee-max').value)    || Infinity;                             
+      1441 +    const schMin   = parseInt(document.getElementById('flt-sc
+           +hools-min').value)  || 0;                                    
+      1442 +    const schMax   = parseInt(document.getElementById('flt-sc
+           +hools-max').value)  || Infinity;                             
+      1443 +    const medMin   = parseInt(document.getElementById('flt-me
+           +dical-min').value)  || 0;                                    
+      1444 +    const medMax   = parseInt(document.getElementById('flt-me
+           +dical-max').value)  || Infinity;                             
+      1445  
+      1458 -    qryFiltered = HOUSING_DATA.filter(r =>                   
+      1459 -        (!name || r.name.includes(name)) &&                  
+      1460 -        (!dist || r.district === dist) &&                    
+      1461 -        (!dev  || r.developer === dev) &&                    
+      1462 -        (!type || r.type === type) &&                        
+      1463 -        r.year   >= yMin   && r.year   <= yMax   &&          
+      1464 -        r.price  >= pMin   && r.price  <= pMax   &&          
+      1465 -        r.far    >= farMin && r.far    <= farMax  &&         
+      1466 -        r.green  >= greenMin && r.green  <= greenMax &&      
+      1467 -        r.fee    >= feeMin && r.fee    <= feeMax  &&         
+      1468 -        r.schools >= schMin && r.schools <= schMax &&        
+      1469 -        r.medical >= medMin && r.medical <= medMax           
+      1470 -    );                                                       
+      1446 +    qryFiltered = HOUSING_DATA.filter(r => {                 
+      1447 +        const yr = r.year || 0;                              
+      1448 +        const far = r.far != null ? r.far : 0;               
+      1449 +        const green = r.green != null ? r.green : 0;         
+      1450 +        const fee = r.fee != null ? r.fee : 0;               
+      1451 +        return (!name || r.name.includes(name)) &&           
+      1452 +            (!dist || r.district === dist) &&                
+      1453 +            (!biz  || r.business === biz) &&                 
+      1454 +            (!sl   || r.school_level === parseInt(sl)) &&    
+      1455 +            yr >= yMin && yr <= yMax &&                      
+      1456 +            r.price >= pMin && r.price <= pMax &&            
+      1457 +            far >= farMin && far <= farMax &&                
+      1458 +            green >= greenMin && green <= greenMax &&        
+      1459 +            fee >= feeMin && fee <= feeMax &&                
+      1460 +            r.schools >= schMin && r.schools <= schMax &&    
+      1461 +            r.medical >= medMin && r.medical <= medMax;      
+      1462 +    });                                                      
+      1463      qryPage = 1;
+      1464      renderQueryTable();
+      1465  }
+      1466  
+      1467  function resetFilters() {
+      1476 -    ['flt-district','flt-developer','flt-type','flt-year-min'
+           -,'flt-year-max'].forEach(id => document.getElementById(id).va
+           -lue = '');                                                   
+      1468 +    ['flt-district','flt-business','flt-school-level','flt-ye
+           +ar-min','flt-year-max'].forEach(id => document.getElementById
+           +(id).value = '');                                            
+      1469      ['flt-name','flt-price-min','flt-price-max',
+      1470       'flt-far-min','flt-far-max','flt-green-min','flt-green-m
+            ax',
+      1471       'flt-fee-min','flt-fee-max','flt-schools-min','flt-schoo
+            ls-max',
+     ...
+      1474  }
+      1475  
+      1476  function sortQuery(field) {
+      1485 -    qrySortAsc = (qrySortField === field) ? !qrySortAsc : ['n
+           -ame','district','developer','type'].includes(field);         
+      1477 +    qrySortAsc = (qrySortField === field) ? !qrySortAsc : ['n
+           +ame','district','business'].includes(field);                 
+      1478      qrySortField = field;
+      1479      qryPage = 1;
+      1480      renderQueryTable();
+     ...
+      1482  
+      1483  function renderQueryTable() {
+      1484      const sorted = [...qryFiltered].sort((a, b) => {
+      1493 -        const av = a[qrySortField], bv = b[qrySortField];    
+      1494 -        const cmp = typeof av === 'string' ? av.localeCompare
+           -(bv, 'zh') : av - bv;                                        
+      1485 +        const av = a[qrySortField] ?? '', bv = b[qrySortField
+           +] ?? '';                                                     
+      1486 +        const cmp = typeof av === 'string' ? av.localeCompare
+           +(bv, 'zh') : (av - bv);                                      
+      1487          return qrySortAsc ? cmp : -cmp;
+      1488      });
+      1489  
+     ...
+      1497      const totalPages = Math.max(1, Math.ceil(sorted.length / 
+            QRY_PAGE_SIZE));
+      1498      const rows = sorted.slice((qryPage - 1) * QRY_PAGE_SIZE, 
+            qryPage * QRY_PAGE_SIZE);
+      1499  
+      1500 +    const slLabels = { 1: '优质', 2: '良好', 3: '普通' };    
+      1501      const tbody = document.getElementById('qry-tbody');
+      1502      if (rows.length === 0) {
+      1503          tbody.innerHTML = `<tr><td colspan="11" class="qry-no
+            -result">未找到符合条件的房屋数据，请调整筛选条件</td></tr>`;
+      1504      } else {
+      1505          tbody.innerHTML = rows.map(r => {
+      1513 -            const pc = r.price >= 14000 ? 'qry-price-high' : 
+           -r.price >= 8000 ? 'qry-price-mid' : 'qry-price-low';         
+      1506 +            const pc = r.price >= 20000 ? 'qry-price-high' : 
+           +r.price >= 12000 ? 'qry-price-mid' : 'qry-price-low';        
+      1507 +            const slText = r.school_level ? `${slLabels[r.sch
+           +ool_level] || r.school_level}级` : '—';                      
+      1508              return `<tr>
+      1509                  <td>${r.name}</td>
+      1516 -                <td><span class="qry-tag qry-tag-blue">${r.di
+           -strict}</span></td>                                          
+      1517 -                <td>${r.developer}</td>                      
+      1510 +                <td><span class="qry-tag qry-tag-blue">${r.di
+           +strict || '—'}</span></td>                                   
+      1511 +                <td>${r.business || '—'}</td>                
+      1512                  <td class="${pc}">${r.price.toLocaleString()}
+            </td>
+      1519 -                <td>${r.year}</td>                           
+      1520 -                <td><span class="qry-tag qry-tag-green">${r.t
+           -ype}</span></td>                                             
+      1521 -                <td>${r.far}</td>                            
+      1522 -                <td>${r.green}%</td>                         
+      1523 -                <td>${r.fee} 元/㎡·月</td>                   
+      1513 +                <td>${r.year || '—'}</td>                    
+      1514 +                <td><span class="qry-tag qry-tag-green">${slT
+           +ext}</span></td>                                             
+      1515 +                <td>${r.far != null ? r.far : '—'}</td>      
+      1516 +                <td>${r.green != null ? r.green + '%' : '—'}<
+           +/td>                                                         
+      1517 +                <td>${r.fee != null ? r.fee + ' 元/㎡·月' : '
+           +—'}</td>                                                     
+      1518                  <td>${r.schools}</td>
+      1519                  <td>${r.medical}</td>
+      1520              </tr>`;
+      1521          }).join('');
+      1522      }
+      1523  
+      1530 -    // Pagination                                            
+      1524      const pg = document.getElementById('qry-pagination');
+      1525      if (totalPages <= 1) { pg.innerHTML = ''; return; }
+      1526      const lo = Math.max(1, qryPage - 2), hi = Math.min(totalP
+            ages, qryPage + 2);
+
+● 完成了。三处修改总结：
+
+  ┌───────┬─────────────────────────────────────────────────────────────────┐
+  │ 改动  │                              内容                               │
+  ├───────┼─────────────────────────────────────────────────────────────────┤
+  │ 筛选  │ "开发商"→"商圈板块"下拉、"户型"→"学区等级"（1/2/3级）           │
+  │ 器    │                                                                 │
+  ├───────┼─────────────────────────────────────────────────────────────────┤
+  │ 表头  │ 对应列更新为 business / school_level                            │
+  ├───────┼─────────────────────────────────────────────────────────────────┤
+  │ JS 数 │ 删除伪随机生成器，改为 fetch('housing_data.json') 加载 6727     │
+  │ 据层  │ 条真实数据；区域、商圈下拉从真实数据动态生成；全市均价和覆盖区  │
+  │       │ 域数自动计算                                                    │
+  └───────┴─────────────────────────────────────────────────────────────────┘
+
+  使用时把 housing_data.json（已生成在桌面项目文件夹里）和 index_v2.html
+  放在同一目录，用浏览器打开即可。
+
+✻ Sautéed for 2m 21s
+
+> 数据查询模块里没有小区名称啊                                                  
+
+● 让我看一下当前的筛选器侧边栏状态。
+
+  Read 1 file (ctrl+o to expand)
+
+● 侧边栏筛选器有"小区名称"输入框，HTML 也没问题。让我看一下表格渲染部分确认：
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash("/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/python.exe"
+      -c "
+      import json…)
+  ⎿  Error: Exit code 127
+     /usr/bin/bash: line 9: source /c/Users/Kxxan/.claude/shell-snapshots/snapsh
+     ot-bash-1777298796715-ob7nqk.sh 2>/dev/null || true && shopt -u extglob 
+     2>/dev/null || true && eval 
+     '"/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/python.exe" -c
+      "
+     import json
+     with 
+     open('"'"'C:/Users/Kxxan/Desktop/Wuhan_Housing_Viz/housing_data.json'"'"', 
+     encoding='"'"'utf-8'"'"') as f:
+         data = json.load(f)
+     print('"'"'总记录数:'"'"', len(data))
+     print('"'"'前3条 name 字段:'"'"')
+     for r in data[:3]:
+         print('"'"' '"'"', r.get('"'"'name'"'"'))
+     print('"'"'name 为空的数量:'"'"', sum(1 for r in data if not 
+     r.get('"'"'name'"'"')))
+     … +1 line (ctrl+o to expand)
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● JSON 是单行，无法逐行搜索。直接写个脚本检查：
+
+● Write(check_json.py)
+  ⎿  Wrote 6 lines to check_json.py
+      1 import json
+      2 with open('housing_data.json', encoding='utf-8') as f:
+      3     data = json.load(f)
+      4 print('总记录数:', len(data))
+      5 print('第1条:', data[0])
+      6 print('name 为空:', sum(1 for r in data if not r.get('name')))
+
+● Bash(cd /c/Users/Kxxan/Desktop/Wuhan_Housing_Viz &&
+      "/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/python.exe"
+      check_json.py)
+  ⎿  �ܼ�¼��: 6727
+     ��1��: {'id': 1, 'name': '', 'district': '��ɽ', 'business': '׿��Ȫ', 'p
+     rice': 22781, 'year': 2012, 'far': 2.93, 'green': 35.0, 'fee': 1.8, 's
+     … +4 lines (ctrl+o to expand)
+
+● 找到问题了：所有 6727 条记录的 name 字段全是空字符串。原因是 CSV
+  的列名编码不匹配，小区 字段没被正确读到。先检查实际列名：
+
+● Write(check_cols.py)
+  ⎿  Wrote 9 lines to check_cols.py
+      1 import csv
+      2 with open(r'C:\Users\Kxxan\PycharmProjects\pythonProject\筛选后数
+        据26_radiation.csv', encoding='utf-8-sig') as f:
+      3     reader = csv.DictReader(f)
+      4     cols = reader.fieldnames
+      5     print('列名:', cols[:5])
+      6     row = next(reader)
+      7     print('小区值:', repr(row.get('小区', 'KEY_NOT_FOUND')))
+      8     print('第一列key:', repr(list(row.keys())[0]))
+      9     print('第一列值:', repr(list(row.values())[0]))
+
+● Bash("/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/python.exe"
+      check_cols.py)
+  ⎿  ����: ['С��', '��������', '��Ȧ���', '��ַ', '����']
+     С��ֵ: '��������'
+     ��һ��key: 'С��'
+     ��һ��ֵ: '��������'
+
+● 找到了：CSV 有 BOM 头，encoding='utf-8' 导致第一列键名带 \ufeff，小区
+  字段查不到。修复转换脚本改用 utf-8-sig：
+
+● Update(convert_housing_data.py)
+  ⎿  Added 1 line, removed 1 line
+      21  records = []
+      22  seen = set()
+      23  
+      24 -with open(csv_path, encoding='utf-8') as f:                    
+      24 +with open(csv_path, encoding='utf-8-sig') as f:                
+      25      reader = csv.DictReader(f)
+      26      for i, row in enumerate(reader, 1):
+      27          name = row.get('小区', '').strip()
+
+● Bash("/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/python.exe"
+      convert_housing_data.py &&
+      "/c/Users/Kxxan/PycharmProjects/pythonProject/.venv/Scripts/p…)
+  ⎿  Done: 6728 records -> C:\Users\Kxxan\Desktop\Wuhan_Housing_Viz\housing
+     _data.json
+     �ܼ�¼��: 6728
+     … +6 lines (ctrl+o to expand)
+
+● name 为空: 0，所有记录都有小区名称了。第 1 条是"保利华都"，共 6728 
+  条真实数据，housing_data.json 已重新生成。
+
+  刷新浏览器，数据查询模块里小区名称就会正常显示。
+
+✻ Worked for 2m 10s
+
+> 现在图5-1是什么样的一个图                                                     
+
+● 基于当前系统的实际实现，图5-1应该是这样的：
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                         视图层（View Layer）                      │
+  │  ┌─────────────────┐  ┌──────────────────┐  ┌────────────────┐  │
+  │  │   左侧边栏控件   │  │  Leaflet 交互地图 │  │  ECharts 图表  │  │
+  │  │ • 模型切换 Tab  │  │ • 高德底图瓦片   │  │ • 柱状图       │  │
+  │  │ • 参数滑块输入  │  │ • GWR散点标注   │  │ • 饼图         │  │
+  │  │ • 热力图开关    │  │ • 热力图叠加     │  │ • 雷达图       │  │
+  │  │ • 筛选器表单    │  │ • 用户选点标记   │  │ • 数据查询表格  │  │
+  │  └─────────────────┘  └──────────────────┘  └────────────────┘  │
+  └────────────────────────────────┬─────────────────────────────────┘
+                      DOM事件 / 渲染调用 ↑↓
+  ┌────────────────────────────────┴─────────────────────────────────┐
+  │                        逻辑层（Logic Layer）                      │
+  │  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  ┌─────────┐  │
+  │  │ 空间最近邻   │  │  预测计算模块 │  │ 图表渲染 │  │数据查询 │  │
+  │  │ 匹配模块     │  │ • 特征标准化  │  │ 模块     │  │ 模块    │  │
+  │  │ O(n)遍历     │  │ • MLR/Lasso  │  │ ECharts  │  │多字段   │  │
+  │  │ distanceTo   │  │ • GWR局部系数 │  │ setOption│  │筛选排序 │  │
+  │  └──────────────┘  └──────────────┘  └──────────┘  └─────────┘  │
+  └────────────────────────────────┬─────────────────────────────────┘
+                        fetch异步加载 ↑↓
+  ┌────────────────────────────────┴─────────────────────────────────┐
+  │                        数据层（Data Layer）                       │
+  │  ┌─────────────────────────────┐  ┌──────────────────────────┐   │
+  │  │    gwr_coefficients.json    │  │    housing_data.json      │   │
+  │  │ • GWR各点局部系数            │  │ • 6728条真实小区记录      │   │
+  │  │ • MLR / Lasso 全局系数      │  │ • 来源：筛选后数据26      │   │
+  │  │ • 标准化参数(μ, σ)          │  │ • 字段：名称/区域/价格    │   │
+  │  │ • 特征均值 feature_means    │  │   容积率/绿化率/学区等级  │   │
+  │  └─────────────────────────────┘  └──────────────────────────┘   │
+  └──────────────────────────────────────────────────────────────────┘
+
+  用 PowerPoint 或 draw.io
+  绘制时：三个大矩形框上下排列，层间用双向箭头连接并标注数据流方向，每层内部用虚
+  线分隔子模块即可。和之前描述的结构一样，区别在于数据层右侧框现在明确写的是
+  housing_data.json（6728条真实数据），而不是之前说的"模拟样本"。
+
+※ recap: Working on a Wuhan housing price prediction web system for a thesis. Just fixed the data query module to use 6728 real records from CSV instead of fake data. Next: verify the page displays correctly in browser. (disable recaps in /config)
+
+> 怎么用draw.io 绘制                                                            
+
+● 有两种方法，推荐第二种，直接导入 XML 一步到位。
+
+  ---
+  方法一：手动拖拽
+
+  1. 打开 https://app.diagrams.net/，选 Blank
+  2. 左侧面板搜索 rectangle，拖三个大矩形到画布，上下排列
+  3. 双击矩形输入文字（视图层 / 逻辑层 / 数据层）
+  4. 在大矩形内再拖小矩形作为子模块
+  5. 用 Arrow 工具连接层间，双击箭头添加标注文字
+  6. 选中元素后右侧可改颜色、字体
+
+  ---
+  方法二：导入 XML（推荐，直接生成图）
+
+  1. 打开 draw.io → 菜单 Extras → Edit Diagram
+  2. 清空内容，把下面的 XML 全部粘贴进去，点 OK
+
+  <mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>
+  <mxCell id="10" value="视图层（View Layer）" style="rounded=1;fillColor=#dbeaf
+  e;strokeColor=#3b82f6;fontStyle=1;fontSize=13;" vertex="1" 
+  parent="1"><mxGeometry x="40" y="40" width="680" height="160" 
+  as="geometry"/></mxCell>
+  <mxCell id="11" value="左侧边栏控件&#xa;• 模型切换 Tab&#xa;•
+  参数滑块输入&#xa;• 热力图开关&#xa;• 筛选器表单" 
+  style="rounded=1;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="60" y="80" width="180" height="100" 
+  as="geometry"/></mxCell>
+  <mxCell id="12" value="Leaflet 交互地图&#xa;• 高德底图瓦片&#xa;• GWR
+  散点标注&#xa;• 热力图叠加&#xa;• 用户选点标记" 
+  style="rounded=1;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="270" y="80" width="180" height="100" 
+  as="geometry"/></mxCell>
+  <mxCell id="13" value="ECharts 图表&#xa;• 柱状图&#xa;• 饼图&#xa;• 雷达图&#xa;•
+   数据查询表格" 
+  style="rounded=1;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="480" y="80" width="180" height="100" 
+  as="geometry"/></mxCell>
+  <mxCell id="20" value="逻辑层（Logic Layer）" style="rounded=1;fillColor=#dcfc
+  e7;strokeColor=#22c55e;fontStyle=1;fontSize=13;" vertex="1" 
+  parent="1"><mxGeometry x="40" y="260" width="680" height="160" 
+  as="geometry"/></mxCell>
+  <mxCell id="21" value="空间最近邻匹配&#xa;• O(n) 遍历&#xa;• distanceTo
+  球面距离" style="rounded=1;fillColor=#f0fdf4;strokeColor=#86efac;fontSize=11;"
+   vertex="1" parent="1"><mxGeometry x="60" y="300" width="140" height="90" 
+  as="geometry"/></mxCell>
+  <mxCell id="22" value="预测计算模块&#xa;• 特征标准化(Z-Score)&#xa;• MLR /
+  Lasso 全局系数&#xa;• GWR 局部系数" 
+  style="rounded=1;fillColor=#f0fdf4;strokeColor=#86efac;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="220" y="300" width="170" height="90" 
+  as="geometry"/></mxCell>
+  <mxCell id="23" value="图表渲染模块&#xa;• ECharts setOption&#xa;•
+  区域/年代分布图&#xa;• 多点对比图" 
+  style="rounded=1;fillColor=#f0fdf4;strokeColor=#86efac;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="410" y="300" width="140" height="90" 
+  as="geometry"/></mxCell>
+  <mxCell id="24" value="数据查询模块&#xa;• 多字段筛选&#xa;• 排序 / 分页" 
+  style="rounded=1;fillColor=#f0fdf4;strokeColor=#86efac;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="570" y="300" width="130" height="90" 
+  as="geometry"/></mxCell>
+  <mxCell id="30" value="数据层（Data Layer）" style="rounded=1;fillColor=#fef9c
+  3;strokeColor=#eab308;fontStyle=1;fontSize=13;" vertex="1" 
+  parent="1"><mxGeometry x="40" y="480" width="680" height="160" 
+  as="geometry"/></mxCell>
+  <mxCell id="31" value="gwr_coefficients.json&#xa;• GWR 各点局部系数&#xa;• MLR
+  / Lasso 全局系数&#xa;• 标准化参数 (μ, σ)&#xa;• 特征均值 feature_means" 
+  style="rounded=1;fillColor=#fefce8;strokeColor=#fde047;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="80" y="520" width="240" height="100" 
+  as="geometry"/></mxCell>
+  <mxCell id="32" value="housing_data.json&#xa;• 6728 条真实小区记录&#xa;•
+  来源：筛选后数据26_radiation.csv&#xa;• 字段：名称/区域/价格/容积率&#xa;
+  绿化率/学区等级/坐标" 
+  style="rounded=1;fillColor=#fefce8;strokeColor=#fde047;fontSize=11;" 
+  vertex="1" parent="1"><mxGeometry x="390" y="520" width="280" height="100" 
+  as="geometry"/></mxCell>
+  <mxCell id="40" value="DOM事件 / 渲染调用" style="edgeStyle=orthogonalEdgeStyl
+  e;endArrow=block;startArrow=block;fontSize=10;strokeColor=#3b82f6;" edge="1" 
+  source="10" target="20" parent="1"><mxGeometry relative="1" 
+  as="geometry"/></mxCell>
+  <mxCell id="41" value="fetch 异步加载" style="edgeStyle=orthogonalEdgeStyle;en
+  dArrow=block;startArrow=block;fontSize=10;strokeColor=#22c55e;" edge="1" 
+  source="20" target="30" parent="1"><mxGeometry relative="1" 
+  as="geometry"/></mxCell>
+  </root></mxGraphModel>
+
+  3. 图就自动生成了，可以再拖动调整位置和大小
+  4. File → Export as → PNG / SVG 导出插入论文
+
+  ---
+  方法二生成的图颜色已经配好（蓝/绿/黄三层），直接能用。
+
+>  (error on line 7 at column 3: Extra content at the end of the document)      
+
+● XML 换行导致格式错误，用下面这个单行版本替换：
+
+● Write(architecture_diagram.xml)
+  ⎿  Wrote 1 lines to architecture_diagram.xml
+        xCell id="10" value="视图层（View Layer）" style="rounded=1;fillC
+        olor=#dbeafe;strokeColor=#3b82f6;fontStyle=1;fontSize=13;vertical
+        Align=top;" vertex="1" parent="1"><mxGeometry x="40" y="40" width
+        ="680" height="160" as="geometry"/></mxCell><mxCell id="11" value
+        ="左侧边栏控件&#xa;• 模型切换 Tab&#xa;• 参数滑块输入&#xa;• 热力图
+        olor=#93c5fd;fontSize=11;" vertex="1" parent="1"><mxGeometry x="6
+        0" y="80" width="180" height="100" as="geometry"/></mxCell><mxCel
+        l id="12" value="Leaflet 交互地图&#xa;• 高德底图瓦片&#xa;• GWR 散
+        点标注&#xa;• 热力图叠加&#xa;• 用户选点标记" style="rounded=1;fill
+        Color=#eff6ff;strokeColor=#93c5
+     … +47 lines (ctrl+o to expand)
+
+● XML 文件已保存到桌面项目文件夹。导入步骤：
+
+  1. 打开 https://app.diagrams.net/
+  2. 菜单 Extras → Edit Diagram
+  3. 全选清空，然后复制 architecture_diagram.xml 文件里的内容粘贴进去
+  4. 点 OK
+
+  或者更简单：直接把 architecture_diagram.xml 文件拖拽到 draw.io 
+  页面上，它会自动识别并打开。
+
+✻ Worked for 41s
+
+※ recap: Working on a Wuhan housing price prediction thesis. The architecture diagram XML file is ready at the desktop project folder — user just needs to drag it into draw.io to generate Figure 5-1. (disable recaps in /config)
